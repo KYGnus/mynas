@@ -1,6 +1,6 @@
 # MYNAS – Enterprise NAS Management Tool
 
-**Version:** 7.0.0  
+**Version:** 1.0.0  
 **Author:** Koosha Yeganeh  
 **License:** GPL-3.0 (or your preferred open-source license)
 
