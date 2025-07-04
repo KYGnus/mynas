@@ -1,0 +1,849 @@
+#!/bin/bash
+
+# Global Configuration
+VERSION="7.0.0"
+CONFIG_DIR="/etc/mynas"
+LOG_DIR="/var/log/mynas"
+BACKUP_DIR="/mnt/backups"
+TEMP_DIR="/tmp/mynas"
+
+# Distribution Detection
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        DISTRO=$ID
+        DISTRO_VERSION=$VERSION_ID
+    elif type lsb_release >/dev/null 2>&1; then
+        DISTRO=$(lsb_release -si | tr '[:upper:]' '[:lower:]')
+        DISTRO_VERSION=$(lsb_release -sr)
+    else
+        log "ERROR: Could not detect Linux distribution!"
+        exit 1
+    fi
+
+    case $DISTRO in
+        debian|ubuntu)
+            PKG_MANAGER="apt"
+            INSTALL_CMD="apt install -y"
+            UPDATE_CMD="apt update && apt upgrade -y"
+            NFS_SERVICE="nfs-kernel-server"
+            FIREWALL_TYPE="iptables"
+            ;;
+        opensuse*|suse)
+            PKG_MANAGER="zypper"
+            INSTALL_CMD="zypper install -y"
+            UPDATE_CMD="zypper refresh && zypper update -y"
+            NFS_SERVICE="nfs-server"
+            FIREWALL_TYPE="firewalld"
+            ;;
+        *)
+            log "ERROR: Unsupported distribution: $DISTRO"
+            exit 1
+            ;;
+    esac
+
+    log "Detected distribution: $DISTRO $DISTRO_VERSION"
+    log "Using firewall type: $FIREWALL_TYPE"
+}
+
+# Initialize directories and logging
+init() {
+    mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$BACKUP_DIR" "$TEMP_DIR"
+    local timestamp=$(date +"%Y%m%d_%H%M%S")
+    LOG_FILE="$LOG_DIR/mynas_$timestamp.log"
+    exec 3>&1 4>&2
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    
+    detect_distro
+}
+
+# Logging function
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $@" | tee -a "$LOG_FILE"
+}
+
+# Error handling
+die() {
+    log "ERROR: $@"
+    exit 1
+}
+
+# Show help information
+show_help() {
+    echo "Enterprise NAS Management Tool v$VERSION"
+    echo "Usage: mynas [GLOBAL_OPTIONS] -- [MODULE] -- [ACTION] [OPTIONS]"
+    echo ""
+    echo "Global Options:"
+    echo "  --help, -h     Show this help message"
+    echo "  --version, -v  Show version information"
+    echo "  --verbose      Enable verbose output"
+    echo "  --monitor      Enable monitoring features"
+    echo "  --disk-health  Check disk health"
+    echo ""
+    echo "Modules:"
+    echo "  --backup       Backup management"
+    echo "  --av           Antivirus management"
+    echo "  --system       System management"
+    echo "  --monitor      Monitoring management"
+    echo "  --storage      Storage management"
+    echo "  --nfs          NFS management"
+    echo "  --samba        Samba management"
+    echo "  --sshfs        SSHFS management"
+    echo "  --firewall     Firewall management"
+    echo "  --raid         RAID management"
+    echo "  --network      Network management"
+    echo "  --service      Service management"
+    echo "  --user         User management"
+    echo ""
+    echo "Run 'mynas --help --[MODULE]' for module-specific help"
+    echo "All operations are logged to $LOG_DIR"
+}
+
+# ==================== MONITORING FUNCTIONS ====================
+
+monitor_iostat() {
+    local interval=${1:-2}
+    local count=${2:-5}
+    
+    if ! command -v iostat &> /dev/null; then
+        log "Installing sysstat package for iostat..."
+        eval $INSTALL_CMD sysstat
+    fi
+    
+    log "Running iostat (Interval: ${interval}s, Count: ${count})"
+    iostat -dxm $interval $count
+}
+
+monitor_netdata() {
+    NETDATA_PORT=19999
+
+    get_ip() {
+        hostname -I | awk '{print $1}'
+    }
+
+    case "$1" in
+        start|stop|restart|status)
+            systemctl "$1" netdata
+            if [ "$1" = "start" ]; then
+                IP=$(get_ip)
+                log "Netdata started at: http://${IP}:${NETDATA_PORT}"
+            fi
+            ;;
+        *)
+            die "Invalid netdata command: $1"
+            ;;
+    esac
+}
+
+
+check_disk_health() {
+    log "Checking disk health with SMART..."
+    
+    if ! command -v smartctl &> /dev/null; then
+        log "Installing smartmontools..."
+        eval $INSTALL_CMD smartmontools
+    fi
+    
+    for disk in $(lsblk -d -o NAME -n | grep -v loop); do
+        local device="/dev/$disk"
+        log "Checking health of $device"
+        smartctl -H $device || die "Failed to check disk health"
+        smartctl -A $device | grep -E "^  5|^196|^197|^198" || true
+    done
+}
+
+# ==================== BACKUP FUNCTIONS ====================
+
+backup_tar() {
+    local source="$1"
+    local dest="${2:-$BACKUP_DIR/backup_$(date +%Y%m%d).tar.gz}"
+    log "Creating tar backup of $source to $dest"
+    sudo tar -czvf "$dest" "$source" || die "Failed to create tar backup"
+    log "Backup completed successfully. Size: $(du -h "$dest" | cut -f1)"
+}
+
+backup_zip() {
+    local source="$1"
+    local dest="${2:-$BACKUP_DIR/backup_$(date +%Y%m%d).zip}"
+    log "Creating zip backup of $source to $dest"
+    sudo zip -r "$dest" "$source" || die "Failed to create zip backup"
+    log "Backup completed successfully. Size: $(du -h "$dest" | cut -f1)"
+}
+
+backup_dd() {
+    local source="$1"
+    local dest="${2:-$BACKUP_DIR/disk_clone_$(date +%Y%m%d).img}"
+    log "Creating disk clone of $source to $dest"
+    sudo dd if="$source" of="$dest" bs=4M status=progress || die "Failed to create disk clone"
+    log "Disk clone completed successfully. Size: $(du -h "$dest" | cut -f1)"
+}
+
+# ==================== AV FUNCTIONS ====================
+
+av_scan() {
+    local scan_type="$1"
+    local target="${2:-/}"
+    
+    case "$scan_type" in
+        clamav)
+            log "Starting ClamAV scan on $target"
+            if [ "$DISTRO" = "opensuse" ]; then
+                sudo clamdscan --recursive --infected --remove --verbose "$target" || die "ClamAV scan failed"
+            else
+                sudo clamscan --recursive --infected --remove --verbose "$target" || die "ClamAV scan failed"
+            fi
+            ;;
+        maldet)
+            log "Starting LMD/Maldet scan on $target"
+            if [ -x "/usr/local/sbin/maldet" ]; then
+                sudo /usr/local/sbin/maldet -a "$target" || die "Maldet scan failed"
+            else
+                die "Maldet not found at /usr/local/sbin/maldet"
+            fi
+            ;;
+        rkhunter)
+            log "Starting Rootkit Hunter scan"
+            sudo rkhunter --check --sk --rwo || die "RKHunter scan failed"
+            ;;
+        chkrootkit)
+            log "Starting chkrootkit scan"
+            sudo chkrootkit || die "chkrootkit scan failed"
+            ;;
+        *)
+            die "Invalid AV scan type: $scan_type"
+            ;;
+    esac
+    log "Security scan completed successfully"
+}
+
+update_av_databases() {
+    log "Updating ClamAV databases..."
+    sudo freshclam || die "Failed to update ClamAV databases"
+    
+    if [ -x "/usr/local/sbin/maldet" ]; then
+        log "Updating Maldet signatures..."
+        sudo /usr/local/sbin/maldet -u || die "Failed to update Maldet signatures"
+    else
+        log "Maldet not found, skipping update"
+    fi
+    
+    log "Updating RKHunter databases..."
+    sudo rkhunter --update || die "Failed to update RKHunter databases"
+    
+    log "All AV databases updated successfully"
+}
+
+# ==================== SYSTEM FUNCTIONS ====================
+
+system_update() {
+    log "Updating system packages..."
+    eval $UPDATE_CMD || die "Failed to update system"
+    log "System packages updated successfully"
+}
+
+# ==================== STORAGE MANAGEMENT ====================
+
+storage_manage() {
+    case "$1" in
+        list)
+            log "Listing storage devices"
+            sudo lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT,LABEL,UUID || die "Failed to list storage devices"
+            ;;
+        format)
+            local device="$2"
+            local fstype="${3:-ext4}"
+            log "Formatting $device as $fstype"
+            sudo mkfs.$fstype "$device" || die "Failed to format device"
+            log "Device $device formatted as $fstype"
+            ;;
+        mount)
+            local device="$2"
+            local mountpoint="$3"
+            log "Mounting $device to $mountpoint"
+            sudo mkdir -p "$mountpoint" || die "Failed to create mountpoint"
+            sudo mount "$device" "$mountpoint" || die "Failed to mount device"
+            log "Device $device mounted at $mountpoint"
+            ;;
+        umount)
+            local mountpoint="$2"
+            log "Unmounting $mountpoint"
+            sudo umount "$mountpoint" || die "Failed to unmount"
+            log "Mountpoint $mountpoint unmounted"
+            ;;
+        info)
+            local device="$2"
+            log "Showing info for $device"
+            sudo hdparm -I "$device" || die "Failed to get device info"
+            sudo smartctl -a "$device" || die "Failed to get SMART info"
+            ;;
+        *)
+            die "Invalid storage command: $1"
+            ;;
+    esac
+}
+
+# ==================== NFS MANAGEMENT ====================
+
+nfs_manage() {
+    case "$1" in
+        install)
+            log "Installing NFS server..."
+            case $DISTRO in
+                debian|ubuntu)
+                    eval $INSTALL_CMD nfs-kernel-server
+                    ;;
+                opensuse*)
+                    eval $INSTALL_CMD nfs-server
+                    ;;
+            esac
+            systemctl enable --now $NFS_SERVICE
+            ;;
+        add-share)
+            local path="$2"
+            local clients="$3"
+            local options="${4:-rw,sync,no_subtree_check}"
+            log "Adding NFS share $path for clients $clients"
+            echo "$path $clients($options)" | sudo tee -a /etc/exports > /dev/null
+            sudo exportfs -a || die "Failed to export shares"
+            sudo systemctl restart $NFS_SERVICE || die "Failed to restart NFS"
+            log "NFS share added successfully"
+            ;;
+        *)
+            die "Invalid NFS command: $1"
+            ;;
+    esac
+}
+
+# ==================== SAMBA MANAGEMENT ====================
+
+samba_manage() {
+    case "$1" in
+        install)
+            log "Installing Samba..."
+            eval $INSTALL_CMD samba
+            systemctl enable --now smb
+            ;;
+        add-share)
+            local name="$2"
+            local path="$3"
+            local users="$4"
+            local writable="${5:-yes}"
+            log "Adding Samba share $name for path $path"
+            echo "[$name]" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   path = $path" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   valid users = $users" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   writable = $writable" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   browsable = yes" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   guest ok = no" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   read only = no" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            sudo systemctl restart smb || die "Failed to restart Samba"
+            log "Samba share $name added successfully"
+            ;;
+        *)
+            die "Invalid Samba command: $1"
+            ;;
+    esac
+}
+
+# ==================== SSHFS MANAGEMENT ====================
+
+sshfs_manage() {
+    case "$1" in
+        install)
+            log "Installing SSHFS..."
+            case $DISTRO in
+                debian|ubuntu)
+                    eval $INSTALL_CMD sshfs
+                    ;;
+                opensuse*)
+                    eval $INSTALL_CMD fuse-sshfs
+                    ;;
+            esac
+            modprobe fuse
+            ;;
+        mount)
+            local user="$2"
+            local host="$3"
+            local remote_path="$4"
+            local local_path="$5"
+            log "Mounting $user@$host:$remote_path to $local_path"
+            mkdir -p "$local_path"
+            sudo sshfs -o allow_other,default_permissions $user@$host:$remote_path $local_path || die "SSHFS mount failed"
+            log "SSHFS mount successful"
+            ;;
+        *)
+            die "Invalid SSHFS command: $1"
+            ;;
+    esac
+}
+
+# ==================== FIREWALL MANAGEMENT ====================
+
+firewall_manage() {
+    case "$FIREWALL_TYPE" in
+        iptables)
+            case "$1" in
+                add-rule)
+                    local chain="$2"
+                    local rule="$3"
+                    log "Adding iptables rule to $chain: $rule"
+                    iptables -A $chain $rule || die "Failed to add iptables rule"
+                    ;;
+                remove-rule)
+                    local chain="$2"
+                    local rule_num="$3"
+                    log "Removing iptables rule from $chain: $rule_num"
+                    iptables -D $chain $rule_num || die "Failed to remove iptables rule"
+                    ;;
+                save)
+                    log "Saving iptables rules"
+                    iptables-save > /etc/iptables.rules || die "Failed to save iptables rules"
+                    ;;
+                restore)
+                    log "Restoring iptables rules"
+                    iptables-restore < /etc/iptables.rules || die "Failed to restore iptables rules"
+                    ;;
+                list)
+                    log "Listing iptables rules"
+                    iptables -L -n -v --line-numbers || die "Failed to list iptables rules"
+                    ;;
+                *)
+                    die "Invalid iptables command"
+                    ;;
+            esac
+            ;;
+        firewalld)
+            case "$1" in
+                add-port)
+                    local port="$2"
+                    local proto="${3:-tcp}"
+                    log "Adding firewalld port $port/$proto"
+                    firewall-cmd --permanent --add-port="$port/$proto" || die "Failed to add port"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    ;;
+                remove-port)
+                    local port="$2"
+                    local proto="${3:-tcp}"
+                    log "Removing firewalld port $port/$proto"
+                    firewall-cmd --permanent --remove-port="$port/$proto" || die "Failed to remove port"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    ;;
+                add-service)
+                    local service="$2"
+                    log "Adding firewalld service $service"
+                    firewall-cmd --permanent --add-service="$service" || die "Failed to add service"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    ;;
+                remove-service)
+                    local service="$2"
+                    log "Removing firewalld service $service"
+                    firewall-cmd --permanent --remove-service="$service" || die "Failed to remove service"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    ;;
+                list)
+                    log "Listing firewalld configuration"
+                    firewall-cmd --list-all || die "Failed to list firewall configuration"
+                    ;;
+                *)
+                    die "Invalid firewalld command"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+# ==================== RAID MANAGEMENT ====================
+
+raid_manage() {
+    if ! command -v mdadm &> /dev/null; then
+        log "Installing mdadm..."
+        eval $INSTALL_CMD mdadm
+    fi
+
+    case "$1" in
+        create)
+            local level="$2"
+            local devices="$3"
+            local name="${4:-md0}"
+            log "Creating RAID $level array $name with devices: $devices"
+            mdadm --create --verbose "/dev/$name" --level="$level" --raid-devices=$(echo $devices | wc -w) $devices || die "Failed to create RAID"
+            mkfs.ext4 "/dev/$name" || die "Failed to create filesystem"
+            log "RAID array created successfully"
+            ;;
+        add)
+            local array="$2"
+            local device="$3"
+            log "Adding device $device to array $array"
+            mdadm --add "/dev/$array" "$device" || die "Failed to add device to array"
+            log "Device $device added to array $array"
+            ;;
+        remove)
+            local array="$2"
+            local device="$3"
+            log "Removing device $device from array $array"
+            mdadm --fail "/dev/$array" "$device" && mdadm --remove "/dev/$array" "$device" || die "Failed to remove device from array"
+            log "Device $device removed from array $array"
+            ;;
+        stop)
+            local array="$2"
+            log "Stopping RAID array $array"
+            mdadm --stop "/dev/$array" || die "Failed to stop RAID array"
+            log "RAID array $array stopped"
+            ;;
+        status)
+            log "RAID Status:"
+            cat /proc/mdstat || die "Failed to check RAID status"
+            mdadm --detail --scan || die "Failed to scan RAID devices"
+            ;;
+        save)
+            log "Saving RAID configuration"
+            mdadm --detail --scan > /etc/mdadm.conf || die "Failed to save RAID config"
+            ;;
+        *)
+            die "Invalid RAID command"
+            ;;
+    esac
+}
+
+# ==================== NETWORK MANAGEMENT ====================
+
+network_manage() {
+    case "$1" in
+        list-interfaces)
+            log "Listing network interfaces"
+            ip -br addr show || die "Failed to list interfaces"
+            ;;
+        set-ip)
+            local iface="$2"
+            local ip="$3"
+            local netmask="${4:-24}"
+            log "Setting IP $ip/$netmask on $iface"
+            ip addr add "$ip/$netmask" dev "$iface" || die "Failed to set IP"
+            log "IP address $ip/$netmask set on $iface"
+            ;;
+        set-gateway)
+            local gw="$2"
+            log "Setting default gateway $gw"
+            ip route add default via "$gw" || die "Failed to set gateway"
+            log "Default gateway set to $gw"
+            ;;
+        set-dns)
+            local dns="$2"
+            log "Setting DNS server $dns"
+            echo "nameserver $dns" | tee /etc/resolv.conf > /dev/null || die "Failed to set DNS"
+            log "DNS server set to $dns"
+            ;;
+        test)
+            log "Testing network connectivity"
+            ping -c 4 8.8.8.8 || die "Network test failed"
+            log "Network test successful"
+            ;;
+        bridge)
+            local name="$2"
+            local ifaces="$3"
+            log "Creating bridge $name with interfaces $ifaces"
+            ip link add name $name type bridge || die "Failed to create bridge"
+            for iface in $ifaces; do
+                ip link set $iface master $name || die "Failed to add interface to bridge"
+            done
+            ip link set $name up || die "Failed to bring up bridge"
+            log "Bridge $name created successfully"
+            ;;
+        bond)
+            local name="$2"
+            local mode="$3"
+            local ifaces="$4"
+            log "Creating bond $name in mode $mode with interfaces $ifaces"
+            ip link add $name type bond mode $mode || die "Failed to create bond"
+            for iface in $ifaces; do
+                ip link set $iface master $name || die "Failed to add interface to bond"
+            done
+            ip link set $name up || die "Failed to bring up bond"
+            log "Bond $name created successfully"
+            ;;
+        *)
+            die "Invalid network command"
+            ;;
+    esac
+}
+
+# ==================== SERVICE MANAGEMENT ====================
+
+service_manage() {
+    local service="$2"
+    case "$1" in
+        start)
+            log "Starting service $service"
+            systemctl start "$service" || die "Failed to start service"
+            log "Service $service started"
+            ;;
+        stop)
+            log "Stopping service $service"
+            systemctl stop "$service" || die "Failed to stop service"
+            log "Service $service stopped"
+            ;;
+        restart)
+            log "Restarting service $service"
+            systemctl restart "$service" || die "Failed to restart service"
+            log "Service $service restarted"
+            ;;
+        enable)
+            log "Enabling service $service"
+            systemctl enable "$service" || die "Failed to enable service"
+            log "Service $service enabled"
+            ;;
+        disable)
+            log "Disabling service $service"
+            systemctl disable "$service" || die "Failed to disable service"
+            log "Service $service disabled"
+            ;;
+        status)
+            log "Status of service $service"
+            systemctl status "$service" --no-pager || die "Failed to get service status"
+            ;;
+        mask)
+            log "Masking service $service"
+            systemctl mask "$service" || die "Failed to mask service"
+            log "Service $service masked"
+            ;;
+        unmask)
+            log "Unmasking service $service"
+            systemctl unmask "$service" || die "Failed to unmask service"
+            log "Service $service unmasked"
+            ;;
+        *)
+            die "Invalid service command"
+            ;;
+    esac
+}
+
+# ==================== USER MANAGEMENT ====================
+
+user_manage() {
+    case "$1" in
+        add)
+            local user="$2"
+            local shell="${3:-/bin/bash}"
+            log "Adding user $user with shell $shell"
+            useradd -m -s "$shell" "$user" || die "Failed to add user"
+            passwd "$user" || die "Failed to set password"
+            log "User $user added successfully"
+            ;;
+        remove)
+            local user="$2"
+            log "Removing user $user"
+            userdel -r "$user" || die "Failed to remove user"
+            log "User $user removed successfully"
+            ;;
+        list)
+            log "Listing users"
+            cut -d: -f1 /etc/passwd || die "Failed to list users"
+            ;;
+        passwd)
+            local user="$2"
+            log "Changing password for $user"
+            passwd "$user" || die "Failed to change password"
+            log "Password changed for $user"
+            ;;
+        add-to-group)
+            local user="$2"
+            local group="$3"
+            log "Adding $user to group $group"
+            usermod -aG "$group" "$user" || die "Failed to add user to group"
+            log "User $user added to group $group"
+            ;;
+        remove-from-group)
+            local user="$2"
+            local group="$3"
+            log "Removing $user from group $group"
+            gpasswd -d "$user" "$group" || die "Failed to remove user from group"
+            log "User $user removed from group $group"
+            ;;
+        list-groups)
+            local user="$2"
+            log "Listing groups for $user"
+            groups "$user" || die "Failed to list groups"
+            ;;
+        lock)
+            local user="$2"
+            log "Locking account for $user"
+            passwd -l "$user" || die "Failed to lock account"
+            log "Account $user locked"
+            ;;
+        unlock)
+            local user="$2"
+            log "Unlocking account for $user"
+            passwd -u "$user" || die "Failed to unlock account"
+            log "Account $user unlocked"
+            ;;
+        *)
+            die "Invalid user command"
+            ;;
+    esac
+}
+
+# ==================== MAIN FUNCTION ====================
+
+main() {
+    # Handle global options first
+    local MONITORING=false
+    local DISK_HEALTH=false
+    
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            --version|-v)
+                echo "Enterprise NAS Management Tool v$VERSION"
+                exit 0
+                ;;
+            --verbose)
+                VERBOSE=true
+                shift
+                ;;
+            --monitor)
+                MONITORING=true
+                shift
+                ;;
+            --disk-health)
+                DISK_HEALTH=true
+                shift
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    init
+    
+    # Check for monitoring flags
+    if $MONITORING; then
+        monitor_iostat 2 5
+    fi
+    
+    if $DISK_HEALTH; then
+        check_disk_health
+    fi
+
+    # Process module commands
+    case "$1" in
+        --backup)
+            shift
+            case "$1" in
+                --tar)
+                    shift
+                    backup_tar "$1" "$2"
+                    ;;
+                --zip)
+                    shift
+                    backup_zip "$1" "$2"
+                    ;;
+                --dd)
+                    shift
+                    backup_dd "$1" "$2"
+                    ;;
+                *)
+                    die "Invalid backup action\n$(show_help)"
+                    ;;
+            esac
+            ;;
+        --av)
+            shift
+            case "$1" in
+                --clamav)
+                    shift
+                    av_scan "clamav" "$1"
+                    ;;
+                --maldet)
+                    shift
+                    av_scan "maldet" "$1"
+                    ;;
+                --rkhunter)
+                    av_scan "rkhunter"
+                    ;;
+                --chkrootkit)
+                    av_scan "chkrootkit"
+                    ;;
+                --update-databases)
+                    update_av_databases
+                    ;;
+                *)
+                    die "Invalid AV action\n$(show_help)"
+                    ;;
+            esac
+            ;;
+        --system)
+            shift
+            system_update
+            ;;
+        --monitor)
+            shift
+            case "$1" in
+                --iostat)
+                    shift
+                    monitor_iostat "$1" "$2"
+                    ;;
+                --netdata)
+                    shift
+                    monitor_netdata "$1"
+                    ;;
+                --disk-health)
+                    check_disk_health
+                    ;;
+                *)
+                    die "Invalid monitor action\n$(show_help)"
+                    ;;
+            esac
+            ;;
+        --storage)
+            shift
+            storage_manage "$@"
+            ;;
+        --nfs)
+            shift
+            nfs_manage "$@"
+            ;;
+        --samba)
+            shift
+            samba_manage "$@"
+            ;;
+        --sshfs)
+            shift
+            sshfs_manage "$@"
+            ;;
+        --firewall)
+            shift
+            firewall_manage "$@"
+            ;;
+        --raid)
+            shift
+            raid_manage "$@"
+            ;;
+        --network)
+            shift
+            network_manage "$@"
+            ;;
+        --service)
+            shift
+            service_manage "$@"
+            ;;
+        --user)
+            shift
+            user_manage "$@"
+            ;;
+        *)
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Initialize and run
+main "$@"
