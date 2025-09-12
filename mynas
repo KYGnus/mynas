@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Global Configuration
-VERSION="1.0.0"
+VERSION="1.0.1"
 CONFIG_DIR="/etc/mynas"
 LOG_DIR="/var/log/mynas"
 BACKUP_DIR="/mnt/backups"
@@ -24,10 +24,10 @@ detect_distro() {
     case $DISTRO in
         debian|ubuntu)
             PKG_MANAGER="apt"
-            INSTALL_CMD="apt install -y"
+            INSTALL_CMD="apt install -y --no-install-recommends"
             UPDATE_CMD="apt update && apt upgrade -y"
             NFS_SERVICE="nfs-kernel-server"
-            FIREWALL_TYPE="iptables"
+            FIREWALL_TYPE="firewalld"
             ;;
         opensuse*|suse)
             PKG_MANAGER="zypper"
@@ -68,6 +68,15 @@ die() {
     exit 1
 }
 
+# Backup configuration file
+backup_file() {
+    local f="$1"
+    if [[ -f "$f" ]] && [[ ! -f "${f}.bak" ]]; then
+        cp -a "$f" "${f}.bak"
+        log "Backed up $f to ${f}.bak"
+    fi
+}
+
 # Show help information
 show_help() {
     echo "Enterprise NAS Management Tool v$VERSION"
@@ -82,14 +91,15 @@ show_help() {
     echo ""
     echo "Modules:"
     echo "  --backup       Backup management"
-    echo "  --av           Antivirus management"
+    echo "  --av           Antivirus management (clamav, maldet, rkhunter, chkrootkit)"
     echo "  --system       System management"
     echo "  --monitor      Monitoring management"
     echo "  --storage      Storage management"
     echo "  --nfs          NFS management"
     echo "  --samba        Samba management"
     echo "  --sshfs        SSHFS management"
-    echo "  --firewall     Firewall management"
+    echo "  --firewall     Firewall management (firewalld)"
+    echo "  --fail2ban     Fail2ban management"
     echo "  --raid         RAID management"
     echo "  --network      Network management"
     echo "  --service      Service management"
@@ -97,6 +107,122 @@ show_help() {
     echo ""
     echo "Run 'mynas --help --[MODULE]' for module-specific help"
     echo "All operations are logged to $LOG_DIR"
+}
+
+# Module-specific help
+module_help() {
+    local module="$1"
+    case "$module" in
+        backup)
+            echo "Backup Module Commands:"
+            echo "  --tar <source> [dest]          Create tar backup"
+            echo "  --zip <source> [dest]          Create zip backup"
+            echo "  --dd <source> [dest]           Create disk clone"
+            ;;
+        av)
+            echo "Antivirus Module Commands:"
+            echo "  --clamav <path>                Run ClamAV scan"
+            echo "  --maldet <path>                Run Maldet scan"
+            echo "  --rkhunter                     Run Rootkit Hunter scan"
+            echo "  --chkrootkit                   Run chkrootkit scan"
+            echo "  --update-databases             Update all AV databases"
+            echo "  --clamav-schedule <path>       Schedule weekly ClamAV scan"
+            echo "  --maldet-monitor <path>        Enable Maldet monitoring"
+            ;;
+        system)
+            echo "System Module Commands:"
+            echo "  --update                       Update system packages"
+            ;;
+        monitor)
+            echo "Monitor Module Commands:"
+            echo "  --iostat [interval] [count]    Run iostat monitoring"
+            echo "  --netdata <start|stop|restart|status>  Manage netdata service"
+            echo "  --disk-health                  Check disk health with SMART"
+            ;;
+        storage)
+            echo "Storage Module Commands:"
+            echo "  --list                         List storage devices"
+            echo "  --format <device> [fstype]     Format device (default: ext4)"
+            echo "  --mount <device> <mountpoint>  Mount device"
+            echo "  --umount <mountpoint>          Unmount device"
+            echo "  --info <device>                Show device information"
+            ;;
+        nfs)
+            echo "NFS Module Commands:"
+            echo "  --install                      Install NFS server"
+            echo "  --add-share <path> <clients> [options]  Add NFS share"
+            ;;
+        samba)
+            echo "Samba Module Commands:"
+            echo "  --install                      Install Samba"
+            echo "  --add-share <name> <path> <users> [writable]  Add Samba share"
+            ;;
+        sshfs)
+            echo "SSHFS Module Commands:"
+            echo "  --install                      Install SSHFS"
+            echo "  --mount <user> <host> <remote_path> <local_path>  Mount SSHFS"
+            ;;
+        firewall)
+            echo "Firewall Module Commands:"
+            echo "  --add-port <port> [proto]      Add port to firewall"
+            echo "  --remove-port <port> [proto]   Remove port from firewall"
+            echo "  --add-service <service>         Add service to firewall"
+            echo "  --remove-service <service>      Remove service from firewall"
+            echo "  --list                         List firewall configuration"
+            ;;
+        fail2ban)
+            echo "Fail2ban Module Commands:"
+            echo "  --install                      Install fail2ban"
+            echo "  --enable-jail <jail>           Enable fail2ban jail"
+            echo "  --disable-jail <jail>          Disable fail2ban jail"
+            echo "  --status                       Show fail2ban status"
+            ;;
+        raid)
+            echo "RAID Module Commands:"
+            echo "  --create <level> <devices> [name]  Create RAID array"
+            echo "  --add <array> <device>          Add device to RAID array"
+            echo "  --remove <array> <device>       Remove device from RAID array"
+            echo "  --stop <array>                  Stop RAID array"
+            echo "  --status                        Show RAID status"
+            echo "  --save                          Save RAID configuration"
+            ;;
+        network)
+            echo "Network Module Commands:"
+            echo "  --list-interfaces              List network interfaces"
+            echo "  --set-ip <iface> <ip> [netmask]  Set IP address"
+            echo "  --set-gateway <gw>             Set default gateway"
+            echo "  --set-dns <dns>                Set DNS server"
+            echo "  --test                         Test network connectivity"
+            echo "  --bridge <name> <ifaces>       Create network bridge"
+            echo "  --bond <name> <mode> <ifaces>  Create network bond"
+            ;;
+        service)
+            echo "Service Module Commands:"
+            echo "  --start <service>              Start service"
+            echo "  --stop <service>               Stop service"
+            echo "  --restart <service>            Restart service"
+            echo "  --enable <service>             Enable service"
+            echo "  --disable <service>            Disable service"
+            echo "  --status <service>             Show service status"
+            echo "  --mask <service>               Mask service"
+            echo "  --unmask <service>             Unmask service"
+            ;;
+        user)
+            echo "User Module Commands:"
+            echo "  --add <user> [shell]           Add user"
+            echo "  --remove <user>                Remove user"
+            echo "  --list                         List users"
+            echo "  --passwd <user>                Change user password"
+            echo "  --add-to-group <user> <group>  Add user to group"
+            echo "  --remove-from-group <user> <group>  Remove user from group"
+            echo "  --list-groups <user>           List user groups"
+            echo "  --lock <user>                  Lock user account"
+            echo "  --unlock <user>                Unlock user account"
+            ;;
+        *)
+            show_help
+            ;;
+    esac
 }
 
 # ==================== MONITORING FUNCTIONS ====================
@@ -134,7 +260,6 @@ monitor_netdata() {
             ;;
     esac
 }
-
 
 check_disk_health() {
     log "Checking disk health with SMART..."
@@ -187,26 +312,38 @@ av_scan() {
     case "$scan_type" in
         clamav)
             log "Starting ClamAV scan on $target"
-            if [ "$DISTRO" = "opensuse" ]; then
-                sudo clamdscan --recursive --infected --remove --verbose "$target" || die "ClamAV scan failed"
-            else
-                sudo clamscan --recursive --infected --remove --verbose "$target" || die "ClamAV scan failed"
+            if ! command -v clamscan &> /dev/null; then
+                log "Installing ClamAV..."
+                eval $INSTALL_CMD clamav clamav-daemon
+                systemctl enable clamav-freshclam --now
+                systemctl enable clamav-daemon --now
             fi
+            sudo clamscan --recursive --infected --bell --log=/var/log/clamav/nas-scan-$(date +%Y%m%d).log "$target" || die "ClamAV scan failed"
             ;;
         maldet)
             log "Starting LMD/Maldet scan on $target"
-            if [ -x "/usr/local/sbin/maldet" ]; then
-                sudo /usr/local/sbin/maldet -a "$target" || die "Maldet scan failed"
-            else
-                die "Maldet not found at /usr/local/sbin/maldet"
+            if ! command -v maldet &> /dev/null; then
+                log "Installing Maldet..."
+                eval $INSTALL_CMD linux-malware-detect
+                maldet --update-ver
+                maldet --update
             fi
+            sudo maldet -a "$target" || die "Maldet scan failed"
             ;;
         rkhunter)
             log "Starting Rootkit Hunter scan"
+            if ! command -v rkhunter &> /dev/null; then
+                log "Installing RKHunter..."
+                eval $INSTALL_CMD rkhunter
+            fi
             sudo rkhunter --check --sk --rwo || die "RKHunter scan failed"
             ;;
         chkrootkit)
             log "Starting chkrootkit scan"
+            if ! command -v chkrootkit &> /dev/null; then
+                log "Installing chkrootkit..."
+                eval $INSTALL_CMD chkrootkit
+            fi
             sudo chkrootkit || die "chkrootkit scan failed"
             ;;
         *)
@@ -216,19 +353,65 @@ av_scan() {
     log "Security scan completed successfully"
 }
 
+av_clamav_schedule() {
+    local target="$1"
+    CRON_FILE="/etc/cron.weekly/clamav-nas-scan"
+    log "Scheduling weekly ClamAV scan for $target"
+    backup_file "$CRON_FILE"
+    cat > "$CRON_FILE" <<EOF
+#!/bin/sh
+clamscan -r "$target" --bell -i --exclude-dir="^/proc|^/sys|^/dev" -l /var/log/clamav/nas-scan-$(date +%Y%m%d).log
+EOF
+    chmod +x "$CRON_FILE"
+    log "Weekly ClamAV scan scheduled for $target"
+}
+
+av_maldet_monitor() {
+    local target="$1"
+    log "Enabling Maldet monitoring for $target"
+    if ! command -v maldet &> /dev/null; then
+        log "Installing Maldet..."
+        eval $INSTALL_CMD linux-malware-detect
+        maldet --update-ver
+        maldet --update
+    fi
+    backup_file /etc/maldetect/conf.maldet
+    cat > /etc/maldetect/conf.maldet <<EOF
+email_alert="1"
+email_addr="root@localhost"
+quarantine_hits="1"
+quarantine_clean="0"
+scan_tmpdir_paths="/tmp /var/tmp"
+scan_user_access="1"
+default_monitor_mode="/usr/local/maldetect/monitor_paths"
+EOF
+    echo "$target" > /usr/local/maldetect/monitor_paths
+    maldet --monitor /usr/local/maldetect/monitor_paths
+    systemctl enable maldet --now || true
+    log "Maldet monitoring enabled for $target"
+}
+
 update_av_databases() {
     log "Updating ClamAV databases..."
+    if ! command -v freshclam &> /dev/null; then
+        log "Installing ClamAV..."
+        eval $INSTALL_CMD clamav clamav-daemon
+    fi
     sudo freshclam || die "Failed to update ClamAV databases"
     
-    if [ -x "/usr/local/sbin/maldet" ]; then
+    if command -v maldet &> /dev/null; then
         log "Updating Maldet signatures..."
-        sudo /usr/local/sbin/maldet -u || die "Failed to update Maldet signatures"
+        sudo maldet -u || die "Failed to update Maldet signatures"
     else
-        log "Maldet not found, skipping update"
+        log "Maldet not installed, skipping update"
     fi
     
-    log "Updating RKHunter databases..."
-    sudo rkhunter --update || die "Failed to update RKHunter databases"
+    if command -v rkhunter &> /dev/null; then
+        log "Updating RKHunter databases..."
+        sudo rkhunter --update || die "Failed to update RKHunter databases"
+    else
+        log "RKHunter not installed, skipping update"
+    fi
     
     log "All AV databases updated successfully"
 }
@@ -261,7 +444,7 @@ storage_manage() {
             local mountpoint="$3"
             log "Mounting $device to $mountpoint"
             sudo mkdir -p "$mountpoint" || die "Failed to create mountpoint"
-            sudo mount "$device" "$mountpoint" || die "Failed to mount device"
+            sudo mount -o noatime,nodiratime "$device" "$mountpoint" || die "Failed to mount device"
             log "Device $device mounted at $mountpoint"
             ;;
         umount)
@@ -288,23 +471,22 @@ nfs_manage() {
     case "$1" in
         install)
             log "Installing NFS server..."
-            case $DISTRO in
-                debian|ubuntu)
-                    eval $INSTALL_CMD nfs-kernel-server
-                    ;;
-                opensuse*)
-                    eval $INSTALL_CMD nfs-server
-                    ;;
-            esac
+            eval $INSTALL_CMD $NFS_SERVICE
             systemctl enable --now $NFS_SERVICE
+            log "NFS server installed and enabled"
             ;;
         add-share)
             local path="$2"
             local clients="$3"
-            local options="${4:-rw,sync,no_subtree_check}"
+            local options="${4:-rw,sync,no_subtree_check,no_root_squash}"
             log "Adding NFS share $path for clients $clients"
-            echo "$path $clients($options)" | sudo tee -a /etc/exports > /dev/null
-            sudo exportfs -a || die "Failed to export shares"
+            backup_file /etc/exports
+            if grep -qE "^[[:space:]]*$(printf '%q' "$path")[[:space:]]" /etc/exports; then
+                sed -ri "s|^(\s*)$(printf '%q' "$path").*|\1${path} ${clients}(${options})|" /etc/exports
+            else
+                echo "$path $clients($options)" | sudo tee -a /etc/exports > /dev/null
+            fi
+            sudo exportfs -ra || die "Failed to export shares"
             sudo systemctl restart $NFS_SERVICE || die "Failed to restart NFS"
             log "NFS share added successfully"
             ;;
@@ -320,8 +502,9 @@ samba_manage() {
     case "$1" in
         install)
             log "Installing Samba..."
-            eval $INSTALL_CMD samba
-            systemctl enable --now smb
+            eval $INSTALL_CMD samba samba-common-bin
+            systemctl enable --now smbd nmbd
+            log "Samba installed and enabled"
             ;;
         add-share)
             local name="$2"
@@ -329,6 +512,7 @@ samba_manage() {
             local users="$4"
             local writable="${5:-yes}"
             log "Adding Samba share $name for path $path"
+            backup_file /etc/samba/smb.conf
             echo "[$name]" | sudo tee -a /etc/samba/smb.conf > /dev/null
             echo "   path = $path" | sudo tee -a /etc/samba/smb.conf > /dev/null
             echo "   valid users = $users" | sudo tee -a /etc/samba/smb.conf > /dev/null
@@ -336,7 +520,12 @@ samba_manage() {
             echo "   browsable = yes" | sudo tee -a /etc/samba/smb.conf > /dev/null
             echo "   guest ok = no" | sudo tee -a /etc/samba/smb.conf > /dev/null
             echo "   read only = no" | sudo tee -a /etc/samba/smb.conf > /dev/null
-            sudo systemctl restart smb || die "Failed to restart Samba"
+            echo "   create mask = 0660" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            echo "   directory mask = 0770" | sudo tee -a /etc/samba/smb.conf > /dev/null
+            sudo mkdir -p "$path"
+            sudo chown root:"$users" "$path"
+            sudo chmod 2770 "$path"
+            sudo systemctl restart smbd || die "Failed to restart Samba"
             log "Samba share $name added successfully"
             ;;
         *)
@@ -360,6 +549,14 @@ sshfs_manage() {
                     ;;
             esac
             modprobe fuse
+            backup_file /etc/fuse.conf
+            touch /etc/fuse.conf
+            if grep -q '^\s*#\s*user_allow_other' /etc/fuse.conf; then
+                sed -ri 's/^\s*#\s*user_allow_other/user_allow_other/' /etc/fuse.conf
+            elif ! grep -q '^\s*user_allow_other' /etc/fuse.conf; then
+                echo "user_allow_other" >> /etc/fuse.conf
+            fi
+            log "SSHFS installed and configured"
             ;;
         mount)
             local user="$2"
@@ -381,38 +578,12 @@ sshfs_manage() {
 
 firewall_manage() {
     case "$FIREWALL_TYPE" in
-        iptables)
-            case "$1" in
-                add-rule)
-                    local chain="$2"
-                    local rule="$3"
-                    log "Adding iptables rule to $chain: $rule"
-                    iptables -A $chain $rule || die "Failed to add iptables rule"
-                    ;;
-                remove-rule)
-                    local chain="$2"
-                    local rule_num="$3"
-                    log "Removing iptables rule from $chain: $rule_num"
-                    iptables -D $chain $rule_num || die "Failed to remove iptables rule"
-                    ;;
-                save)
-                    log "Saving iptables rules"
-                    iptables-save > /etc/iptables.rules || die "Failed to save iptables rules"
-                    ;;
-                restore)
-                    log "Restoring iptables rules"
-                    iptables-restore < /etc/iptables.rules || die "Failed to restore iptables rules"
-                    ;;
-                list)
-                    log "Listing iptables rules"
-                    iptables -L -n -v --line-numbers || die "Failed to list iptables rules"
-                    ;;
-                *)
-                    die "Invalid iptables command"
-                    ;;
-            esac
-            ;;
         firewalld)
+            if ! command -v firewall-cmd &> /dev/null; then
+                log "Installing firewalld..."
+                eval $INSTALL_CMD firewalld
+                systemctl enable --now firewalld
+            fi
             case "$1" in
                 add-port)
                     local port="$2"
@@ -420,6 +591,7 @@ firewall_manage() {
                     log "Adding firewalld port $port/$proto"
                     firewall-cmd --permanent --add-port="$port/$proto" || die "Failed to add port"
                     firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Port $port/$proto added"
                     ;;
                 remove-port)
                     local port="$2"
@@ -427,18 +599,35 @@ firewall_manage() {
                     log "Removing firewalld port $port/$proto"
                     firewall-cmd --permanent --remove-port="$port/$proto" || die "Failed to remove port"
                     firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Port $port/$proto removed"
                     ;;
                 add-service)
                     local service="$2"
                     log "Adding firewalld service $service"
                     firewall-cmd --permanent --add-service="$service" || die "Failed to add service"
                     firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Service $service added"
                     ;;
                 remove-service)
                     local service="$2"
                     log "Removing firewalld service $service"
                     firewall-cmd --permanent --remove-service="$service" || die "Failed to remove service"
                     firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Service $service removed"
+                    ;;
+                add-source)
+                    local source="$2"
+                    log "Adding firewalld source $source"
+                    firewall-cmd --permanent --zone=public --add-source="$source" || die "Failed to add source"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Source $source added"
+                    ;;
+                remove-source)
+                    local source="$2"
+                    log "Removing firewalld source $source"
+                    firewall-cmd --permanent --zone=public --remove-source="$source" || die "Failed to remove source"
+                    firewall-cmd --reload || die "Failed to reload firewall"
+                    log "Source $source removed"
                     ;;
                 list)
                     log "Listing firewalld configuration"
@@ -448,6 +637,69 @@ firewall_manage() {
                     die "Invalid firewalld command"
                     ;;
             esac
+            ;;
+        *)
+            die "Unsupported firewall type: $FIREWALL_TYPE"
+            ;;
+    esac
+}
+
+# ==================== FAIL2BAN MANAGEMENT ====================
+
+fail2ban_manage() {
+    case "$1" in
+        install)
+            log "Installing fail2ban..."
+            eval $INSTALL_CMD fail2ban
+            systemctl enable --now fail2ban
+            backup_file /etc/fail2ban/jail.local
+            cat > /etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+bantime  = 10m
+findtime  = 10m
+maxretry = 5
+destemail = root@localhost
+action = %(action_mwl)s
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 5
+
+[samba]
+enabled = true
+port = 137,138,139,445
+filter = samba
+logpath = /var/log/samba/log.%(netbios_name)s
+maxretry = 5
+EOF
+            log "Fail2ban installed and configured for SSH and Samba"
+            ;;
+        enable-jail)
+            local jail="$2"
+            log "Enabling fail2ban jail $jail"
+            fail2ban-client set "$jail" enabled true || die "Failed to enable jail $jail"
+            systemctl restart fail2ban || die "Failed to restart fail2ban"
+            log "Jail $jail enabled"
+            ;;
+        disable-jail)
+            local jail="$2"
+            log "Disabling fail2ban jail $jail"
+            fail2ban-client set "$jail" enabled false || die "Failed to disable jail $jail"
+            systemctl restart fail2ban || die "Failed to restart fail2ban"
+            log "Jail $jail disabled"
+            ;;
+        status)
+            log "Fail2ban status:"
+            fail2ban-client status || die "Failed to get fail2ban status"
+            log "Detailed jail status:"
+            fail2ban-client status sshd || true
+            fail2ban-client status samba || true
+            ;;
+        *)
+            die "Invalid fail2ban command"
             ;;
     esac
 }
@@ -692,8 +944,13 @@ main() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --help|-h)
-                show_help
-                exit 0
+                if [[ -n "${2:-}" ]] && [[ "$2" == --* ]]; then
+                    module_help "${2#--}"
+                    exit 0
+                else
+                    show_help
+                    exit 0
+                fi
                 ;;
             --version|-v)
                 echo "Enterprise NAS Management Tool v$VERSION"
@@ -750,7 +1007,7 @@ main() {
                     backup_dd "$1" "$2"
                     ;;
                 *)
-                    die "Invalid backup action\n$(show_help)"
+                    die "Invalid backup action\n$(module_help backup)"
                     ;;
             esac
             ;;
@@ -774,8 +1031,16 @@ main() {
                 --update-databases)
                     update_av_databases
                     ;;
+                --clamav-schedule)
+                    shift
+                    av_clamav_schedule "$1"
+                    ;;
+                --maldet-monitor)
+                    shift
+                    av_maldet_monitor "$1"
+                    ;;
                 *)
-                    die "Invalid AV action\n$(show_help)"
+                    die "Invalid AV action\n$(module_help av)"
                     ;;
             esac
             ;;
@@ -798,7 +1063,7 @@ main() {
                     check_disk_health
                     ;;
                 *)
-                    die "Invalid monitor action\n$(show_help)"
+                    die "Invalid monitor action\n$(module_help monitor)"
                     ;;
             esac
             ;;
@@ -821,6 +1086,10 @@ main() {
         --firewall)
             shift
             firewall_manage "$@"
+            ;;
+        --fail2ban)
+            shift
+            fail2ban_manage "$@"
             ;;
         --raid)
             shift

@@ -1,0 +1,444 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ==============================
+# Linux NAS bootstrap (Debian/Ubuntu)
+# Installs & configures: Samba, NFS, SSHFS, rsync, glances, sysstat (iostat), iotop, dstat,
+# ncdu, iftop, nload, bmon, fail2ban, firewalld, clamav, maldet, and useful extras.
+# Creates users, shares, exports.
+# ==============================
+
+# Defaults
+USERS_CSV=""
+SMB_SHARE="/srv/samba/data"
+NFS_SHARE="/srv/nfs/data"
+NFS_CIDR="192.168.0.0/24"
+SMB_WORKGROUP="WORKGROUP"
+SMB_GROUP="nasusers"
+DEFAULT_SMB_PASSWORD="ChangeMe123!"   # CHANGE THIS ASAP
+
+# ---- arg parsing ----
+
+usage() {
+  cat <<EOF
+Linux NAS Setup Script
+=======================
+
+This script installs and configures:
+  - Samba (SMB/CIFS)
+  - NFS kernel server
+  - SSHFS
+  - rsync
+  - Monitoring tools (glances, sysstat, iostat, iotop, dstat, ncdu, iftop, nload, bmon)
+  - Security tools (fail2ban, firewalld, clamav, maldet)
+
+Usage:
+  sudo ./setup_nas.sh [OPTIONS]
+
+Options:
+  --users       Comma-separated usernames to create and enable for Samba
+  --smb-share   Path for Samba share (default: /srv/samba/data)
+  --nfs-share   Path for NFS export (default: /srv/nfs/data)
+  --nfs-cidr    Allowed network in CIDR format (default: 192.168.0.0/24)
+  -h, --help    Show this help message and exit
+
+Examples:
+  sudo ./setup_nas.sh --users koosha,alice --smb-share /srv/samba/data \\
+       --nfs-share /srv/nfs/data --nfs-cidr 192.168.1.0/24
+
+Notes:
+  * Samba users get default password "ChangeMe123!" (change immediately).
+  * NFS is exported to the given subnet with rw,sync,no_subtree_check,no_root_squash.
+  * Firewalld allows SSH, Samba, and NFS for the specified NFS_CIDR.
+  * Fail2ban protects SSH and Samba with default settings.
+  * ClamAV and Maldet are set up for periodic scans.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --users) USERS_CSV="${2:-}"; shift 2 ;;
+    --smb-share) SMB_SHARE="${2:-}"; shift 2 ;;
+    --nfs-share) NFS_SHARE="${2:-}"; shift 2 ;;
+    --nfs-cidr) NFS_CIDR="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1"; usage; exit 1 ;;
+  esac
+done
+
+# ---- preflight ----
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run as root (use sudo)." >&2
+  exit 1
+fi
+
+if ! command -v apt >/dev/null 2>&1; then
+  echo "This script targets Debian/Ubuntu (apt-based)." >&2
+  exit 1
+fi
+
+log() { echo -e "\033[1;32m[+] $*\033[0m"; }
+warn() { echo -e "\033[1;33m[!] $*\033[0m"; }
+err() { echo -e "\033[1;31m[-] $*\033[0m"; }
+
+backup_file() {
+  local f="$1"
+  if [[ -f "$f" ]] && [[ ! -f "${f}.bak" ]]; then
+    cp -a "$f" "${f}.bak"
+    log "Backed up $f to ${f}.bak"
+  fi
+}
+
+ensure_group() {
+  local g="$1"
+  if getent group "$g" >/dev/null; then
+    log "Group '$g' exists"
+  else
+    groupadd "$g"
+    log "Group '$g' created"
+  fi
+}
+
+ensure_user() {
+  local u="$1"
+  local g="$2"
+  if id -u "$u" >/dev/null 2>&1; then
+    log "User '$u' exists"
+  else
+    useradd -m -s /bin/bash -G "$g" "$u"
+    log "User '$u' created and added to '$g'"
+  fi
+  usermod -a -G "$g" "$u"
+}
+
+create_dir_owned() {
+  local path="$1"
+  local owner="$2"
+  local group="$3"
+  local mode="$4"
+  mkdir -p "$path"
+  chown "$owner":"$group" "$path"
+  chmod "$mode" "$path"
+  log "Ensured dir $path (owner=$owner, group=$group, mode=$mode)"
+}
+
+update_line_in_file() {
+  local file="$1" regex="$2" replacement="$3"
+  if grep -Eq "$regex" "$file"; then
+    sed -ri "s|$regex|$replacement|" "$file"
+  else
+    echo "$replacement" >> "$file"
+  fi
+}
+
+# ---- install packages ----
+log "Updating apt and installing packages..."
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y --no-install-recommends \
+  samba samba-common-bin \
+  nfs-kernel-server \
+  sshfs fuse \
+  rsync \
+  glances \
+  sysstat \
+  iotop \
+  dstat \
+  ncdu \
+  iftop \
+  nload \
+  bmon \
+  smartmontools \
+  hdparm \
+  mdadm \
+  lvm2 \
+  htop \
+  tmux \
+  fail2ban \
+  firewalld \
+  clamav clamav-daemon \
+  linux-malware-detect
+
+log "Packages installed."
+
+# ---- group & users ----
+ensure_group "$SMB_GROUP"
+
+IFS=',' read -r -a USERS <<< "${USERS_CSV}"
+if [[ -n "${USERS_CSV}" ]]; then
+  for u in "${USERS[@]}"; do
+    [[ -z "$u" ]] && continue
+    ensure_user "$u" "$SMB_GROUP"
+  done
+else
+  warn "No --users provided; skipping system user creation (you can re-run with --users)."
+fi
+
+# ---- Samba configuration ----
+log "Configuring Samba..."
+backup_file /etc/samba/smb.conf
+
+cat >/etc/samba/smb.conf <<EOF
+[global]
+   workgroup = ${SMB_WORKGROUP}
+   server role = standalone server
+   security = user
+   map to guest = Bad User
+   dns proxy = no
+   usershare allow guests = no
+   printing = bsd
+   disable spoolss = yes
+   load printers = no
+   smb encrypt = desired
+   min protocol = SMB2
+   ea support = yes
+   veto files = /.snapshots/.DS_Store/._*/
+   follow symlinks = yes
+   wide links = yes
+   unix extensions = no
+
+[Data]
+   path = ${SMB_SHARE}
+   browseable = yes
+   writable = yes
+   valid users = @${SMB_GROUP}
+   create mask = 0660
+   directory mask = 0770
+   force group = ${SMB_GROUP}
+   inherit permissions = yes
+   comment = Shared data
+EOF
+
+create_dir_owned "$SMB_SHARE" "root" "$SMB_GROUP" 2770
+
+if [[ -n "${USERS_CSV}" ]]; then
+  for u in "${USERS[@]}"; do
+    if id -u "$u" >/dev/null 2>&1; then
+      (echo "${DEFAULT_SMB_PASSWORD}"; echo "${DEFAULT_SMB_PASSWORD}") | smbpasswd -s -a "$u" || true
+      smbpasswd -e "$u" || true
+      log "Samba account set for '$u' (default password: ${DEFAULT_SMB_PASSWORD})"
+    fi
+  done
+else
+  warn "No users to add to Samba; you can add later with: smbpasswd -a <user>"
+fi
+
+systemctl enable smbd nmbd --now
+log "Samba enabled and started."
+
+# ---- NFS configuration ----
+log "Configuring NFS..."
+backup_file /etc/exports
+
+create_dir_owned "$NFS_SHARE" "root" "$SMB_GROUP" 2770
+
+if grep -qE "^[[:space:]]*$(printf '%q' "$NFS_SHARE")[[:space:]]" /etc/exports; then
+  sed -ri "s|^(\s*)$(printf '%q' "$NFS_SHARE").*|\1${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)|" /etc/exports
+else
+  echo "${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
+fi
+
+exportfs -ra
+systemctl enable nfs-kernel-server --now
+log "NFS exports applied and service started."
+
+# ---- sysstat (iostat, sar) ----
+log "Enabling sysstat data collection..."
+backup_file /etc/default/sysstat
+if [[ -f /etc/default/sysstat ]]; then
+  sed -ri 's/^\s*ENABLED\s*=.*/ENABLED="true"/' /etc/default/sysstat || true
+fi
+systemctl enable sysstat --now || true
+
+# ---- FUSE / sshfs tweak ----
+log "Enabling user_allow_other in /etc/fuse.conf for sshfs convenience..."
+backup_file /etc/fuse.conf
+touch /etc/fuse.conf
+if grep -q '^\s*#\s*user_allow_other' /etc/fuse.conf; then
+  sed -ri 's/^\s*#\s*user_allow_other/user_allow_other/' /etc/fuse.conf
+elif ! grep -q '^\s*user_allow_other' /etc/fuse.conf; then
+  echo "user_allow_other" >> /etc/fuse.conf
+fi
+
+# ---- firewalld configuration ----
+log "Configuring firewalld..."
+systemctl enable firewalld --now
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --permanent --add-service=samba
+firewall-cmd --permanent --add-service=nfs
+firewall-cmd --permanent --zone=public --add-source="${NFS_CIDR}"
+firewall-cmd --reload
+log "Firewalld configured with SSH, Samba, NFS, and source ${NFS_CIDR}."
+
+# ---- fail2ban configuration ----
+log "Configuring fail2ban..."
+backup_file /etc/fail2ban/jail.local
+cat > /etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+bantime  = 10m
+findtime  = 10m
+maxretry = 5
+destemail = root@localhost
+action = %(action_mwl)s
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 5
+
+[samba]
+enabled = true
+port = 137,138,139,445
+filter = samba
+logpath = /var/log/samba/log.%(netbios_name)s
+maxretry = 5
+EOF
+
+systemctl enable fail2ban --now
+log "Fail2ban configured for SSH and Samba protection."
+
+# ---- ClamAV configuration ----
+log "Configuring ClamAV..."
+systemctl stop clamav-freshclam
+freshclam
+systemctl enable clamav-freshclam --now
+systemctl enable clamav-daemon --now
+
+# Set up weekly ClamAV scan
+CRON_FILE="/etc/cron.weekly/clamav-nas-scan"
+backup_file "$CRON_FILE"
+cat > "$CRON_FILE" <<EOF
+#!/bin/sh
+clamscan -r ${SMB_SHARE} ${NFS_SHARE} --bell -i --exclude-dir="^/proc|^/sys|^/dev" -l /var/log/clamav/nas-scan.log
+EOF
+chmod +x "$CRON_FILE"
+log "ClamAV configured with weekly scan for ${SMB_SHARE} and ${NFS_SHARE}."
+
+# ---- Maldet configuration ----
+log "Configuring Maldet..."
+maldet --update-ver
+maldet --update
+mkdir -p /var/log/maldet
+cat > /etc/maldetect/conf.maldet <<EOF
+email_alert="1"
+email_addr="root@localhost"
+quarantine_hits="1"
+quarantine_clean="0"
+scan_tmpdir_paths="/tmp /var/tmp"
+scan_user_access="1"
+default_monitor_mode="/usr/local/maldetect/monitor_paths"
+EOF
+
+# Set up monitoring for NAS shares
+echo "${SMB_SHARE} ${NFS_SHARE}" > /usr/local/maldetect/monitor_paths
+maldet --monitor /usr/local/maldetect/monitor_paths
+systemctl enable maldet --now || true
+log "Maldet configured with monitoring for ${SMB_SHARE} and ${NFS_SHARE}."
+
+# ---- sysctl tuning ----
+SYSCTL_NAS="/etc/sysctl.d/99-nas-tuning.conf"
+backup_file "$SYSCTL_NAS"
+cat > "$SYSCTL_NAS" <<'EOF'
+# --- Network tuning ---
+net.core.rmem_max=134217728
+net.core.wmem_max=134217728
+net.core.netdev_max_backlog=250000
+net.ipv4.tcp_rmem=4096 87380 134217728
+net.ipv4.tcp_wmem=4096 65536 134217728
+net.ipv4.tcp_window_scaling=1
+net.ipv4.tcp_mtu_probing=1
+
+# --- File system / I/O tuning ---
+fs.file-max=2097152
+vm.swappiness=10
+vm.dirty_ratio=15
+vm.dirty_background_ratio=5
+
+# --- Increase NFS & Samba efficiency ---
+net.ipv4.tcp_fin_timeout=15
+net.ipv4.tcp_tw_reuse=1
+EOF
+
+sysctl --system >/dev/null || true
+log "Sysctl kernel params applied."
+
+# ---- ulimits ----
+ULIMIT_FILE="/etc/security/limits.d/nas.conf"
+backup_file "$ULIMIT_FILE"
+cat > "$ULIMIT_FILE" <<EOF
+*       hard    nofile  1048576
+*       soft    nofile  1048576
+*       hard    nproc   65535
+*       soft    nproc   65535
+EOF
+log "Ulimits set for max open files and processes."
+
+# ---- Disk scheduler optimization ----
+for disk in $(lsblk -d -n -o NAME | grep -v "loop\|sr"); do
+  sched="/sys/block/$disk/queue/scheduler"
+  if [[ -f "$sched" ]]; then
+    echo deadline > "$sched"
+    log "Set I/O scheduler to 'deadline' for /dev/$disk"
+  fi
+done
+
+# ---- Mount options reminder ----
+log "Reminder: mount NAS shares with noatime,nodiratime for performance."
+
+# ---- Optional SSD tweaks ----
+if command -v fstrim >/dev/null; then
+  log "Enabling weekly fstrim timer..."
+  systemctl enable fstrim.timer --now
+fi
+
+# ---- Enable zswap (optional, if RAM <16GB) ----
+RAM_MB=$(free -m | awk '/Mem:/ {print $2}')
+if [[ $RAM_MB -lt 16000 ]]; then
+  log "Enabling zswap for low-RAM system..."
+  echo 1 > /sys/module/zswap/parameters/enabled || true
+fi
+
+# ---- final info ----
+cat <<INFO
+
+============================================================
+ DONE ✅  Your NAS baseline is ready.
+------------------------------------------------------------
+Samba:
+  Share:    [Data] -> ${SMB_SHARE}
+  Group:    ${SMB_GROUP}
+  Service:  smbd, nmbd (enabled)
+  Users:    ${USERS_CSV:-<none>}
+  Default Samba password for created users: ${DEFAULT_SMB_PASSWORD}
+
+NFS:
+  Export:   ${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)
+  Service:  nfs-kernel-server (enabled)
+
+Security:
+  Firewalld: Enabled with SSH, Samba, NFS, and source ${NFS_CIDR}
+  Fail2ban: Enabled for SSH and Samba protection
+  ClamAV: Enabled with weekly scans of ${SMB_SHARE} and ${NFS_SHARE}
+  Maldet: Enabled with monitoring of ${SMB_SHARE} and ${NFS_SHARE}
+
+Monitoring & tools installed:
+  glances, sysstat (iostat, sar), iotop, dstat, ncdu, iftop, nload, bmon,
+  rsync, sshfs, smartmontools, hdparm, mdadm, lvm2, htop, tmux,
+  fail2ban, firewalld, clamav, maldet
+
+Security notes:
+  * CHANGE Samba passwords immediately: smbpasswd <user>
+  * Review firewalld rules: firewall-cmd --list-all
+  * Check ClamAV scan logs: /var/log/clamav/nas-scan.log
+  * Check Maldet logs: /var/log/maldet/
+  * Consider restricting NFS to specific hosts instead of a subnet.
+
+Re-run this script safely if you change flags (it is idempotent).
+============================================================
+INFO
+
+log "NAS kernel and system optimization complete."
+
+exit 0
