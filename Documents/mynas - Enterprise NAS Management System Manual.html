@@ -1,0 +1,1979 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mynas - Enterprise NAS Management System</title>
+  <link rel="stylesheet" href="https://stackedit.io/style.css" />
+</head>
+
+<body class="stackedit">
+  <div class="stackedit__html"><h1 id="🗄️-mynas---complete-command-reference-manual">🗄️ <strong>mynas - Complete Command Reference Manual</strong></h1>
+<p><strong>Version:</strong> 1.0.1+<br>
+<strong>Developer:</strong> KYGnus<br>
+<strong>Repository:</strong> <a href="https://github.com/KYGnus/mynas.git">https://github.com/KYGnus/mynas.git</a></p>
+<hr>
+<h2 id="📖-table-of-contents">📖 <strong>TABLE OF CONTENTS</strong></h2>
+<ol>
+<li><a href="#global-options">Global Options</a></li>
+<li><a href="#user-management">User Management</a></li>
+<li><a href="#group-management">Group Management</a></li>
+<li><a href="#access-policy-management">Access Policy Management</a></li>
+<li><a href="#storage-management">Storage Management</a></li>
+<li><a href="#raid-management">RAID Management</a></li>
+<li><a href="#lvm-management">LVM Management</a></li>
+<li><a href="#filesystem-management">Filesystem Management</a></li>
+<li><a href="#share-management">Share Management</a></li>
+<li><a href="#samba-management">Samba Management</a></li>
+<li><a href="#nfs-management">NFS Management</a></li>
+<li><a href="#sshfs-management">SSHFS Management</a></li>
+<li><a href="#firewall-management">Firewall Management</a></li>
+<li><a href="#fail2ban-management">Fail2ban Management</a></li>
+<li><a href="#antivirus-management">Antivirus Management</a></li>
+<li><a href="#monitoring-management">Monitoring Management</a></li>
+<li><a href="#backup-management">Backup Management</a></li>
+<li><a href="#system-management">System Management</a></li>
+<li><a href="#network-management">Network Management</a></li>
+<li><a href="#service-management">Service Management</a></li>
+<li><a href="#permission-management">Permission Management</a></li>
+</ol>
+<hr>
+<h2 id="🌐-global-options">🌐 <strong>GLOBAL OPTIONS</strong></h2>
+<h3 id="help--h"><strong>–help, -h</strong></h3>
+<p>Show help information.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show main help</span>
+mynas --help
+
+<span class="token comment"># Show module-specific help</span>
+mynas --help --user
+mynas --help --storage
+mynas --help --raid
+
+<span class="token comment"># Show all available modules</span>
+mynas --help --all
+</code></pre>
+<h3 id="version--v"><strong>–version, -v</strong></h3>
+<p>Show version information.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show version</span>
+mynas --version
+<span class="token comment"># Output: Enterprise NAS Management Tool v1.0.1</span>
+</code></pre>
+<h3 id="verbose"><strong>–verbose</strong></h3>
+<p>Enable verbose output for debugging.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Verbose storage listing</span>
+mynas --verbose --storage --list
+
+<span class="token comment"># Verbose user creation</span>
+mynas --verbose --user --add john
+</code></pre>
+<h3 id="monitor"><strong>–monitor</strong></h3>
+<p>Enable monitoring features during execution.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Monitor while creating RAID</span>
+mynas --monitor --raid --create 1 /dev/sdb /dev/sdc md0
+
+<span class="token comment"># Monitor storage operations</span>
+mynas --monitor --storage --format /dev/sdb1 ext4
+</code></pre>
+<h3 id="disk-health"><strong>–disk-health</strong></h3>
+<p>Check disk health before operations.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check health before RAID creation</span>
+mynas --disk-health --raid --create 1 /dev/sdb /dev/sdc
+
+<span class="token comment"># Health check with storage operations</span>
+mynas --disk-health --storage --list
+</code></pre>
+<hr>
+<h2 id="👤-user-management">👤 <strong>USER MANAGEMENT</strong></h2>
+<h3 id="user---add-username-shell"><strong>–user --add &lt;username&gt; [shell]</strong></h3>
+<p>Add a new user with optional shell specification.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add user with default shell (/bin/bash)</span>
+mynas --user --add john
+
+<span class="token comment"># Add user with specific shell</span>
+mynas --user --add mary /bin/bash
+mynas --user --add dave /bin/zsh
+mynas --user --add guest /bin/rbash
+
+<span class="token comment"># Add multiple users in sequence</span>
+mynas --user --add alice <span class="token operator">&amp;&amp;</span> mynas --user --add bob <span class="token operator">&amp;&amp;</span> mynas --user --add charlie
+</code></pre>
+<h3 id="user---remove-username-keep_home"><strong>–user --remove &lt;username&gt; [keep_home]</strong></h3>
+<p>Remove a user with option to keep home directory.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove user and delete home directory</span>
+mynas --user --remove john
+
+<span class="token comment"># Remove user but keep home directory</span>
+mynas --user --remove mary <span class="token function">yes</span>
+
+<span class="token comment"># Remove user and all associated files</span>
+mynas --user --remove olduser no
+</code></pre>
+<h3 id="user---list"><strong>–user --list</strong></h3>
+<p>List all system users or NAS-specific users.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all users</span>
+mynas --user --list
+
+<span class="token comment"># Filter output (using grep)</span>
+mynas --user --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"john|mary"</span>
+
+<span class="token comment"># Count users</span>
+mynas --user --list <span class="token operator">|</span> <span class="token function">wc</span> -l
+</code></pre>
+<h3 id="user---passwd-username"><strong>–user --passwd &lt;username&gt;</strong></h3>
+<p>Change user password interactively.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Change password for single user</span>
+mynas --user --passwd john
+
+<span class="token comment"># Change passwords in batch</span>
+<span class="token keyword">for</span> user <span class="token keyword">in</span> john mary bob<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --user --passwd <span class="token variable">$user</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="user---add-to-group-username-groupname"><strong>–user --add-to-group &lt;username&gt; &lt;groupname&gt;</strong></h3>
+<p>Add user to an existing group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add user to single group</span>
+mynas --user --add-to-group john developers
+mynas --user --add-to-group mary managers
+
+<span class="token comment"># Add user to multiple groups</span>
+mynas --user --add-to-group admin nasadmin
+mynas --user --add-to-group admin <span class="token function">sudo</span>
+mynas --user --add-to-group admin wheel
+</code></pre>
+<h3 id="user---remove-from-group-username-groupname"><strong>–user --remove-from-group &lt;username&gt; &lt;groupname&gt;</strong></h3>
+<p>Remove user from a group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove user from group</span>
+mynas --user --remove-from-group john developers
+mynas --user --remove-from-group mary temporary
+
+<span class="token comment"># Remove from multiple groups</span>
+mynas --user --remove-from-group olduser project1
+mynas --user --remove-from-group olduser project2
+</code></pre>
+<h3 id="user---list-groups-username"><strong>–user --list-groups &lt;username&gt;</strong></h3>
+<p>List all groups a user belongs to.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List groups for specific user</span>
+mynas --user --list-groups john
+
+<span class="token comment"># List groups for current user</span>
+mynas --user --list-groups <span class="token variable"><span class="token variable">$(</span><span class="token function">whoami</span><span class="token variable">)</span></span>
+
+<span class="token comment"># Check if user is in specific group</span>
+mynas --user --list-groups admin <span class="token operator">|</span> <span class="token function">grep</span> -q <span class="token string">"sudo"</span> <span class="token operator">&amp;&amp;</span> <span class="token keyword">echo</span> <span class="token string">"Admin has sudo"</span>
+</code></pre>
+<h3 id="user---lock-username"><strong>–user --lock &lt;username&gt;</strong></h3>
+<p>Lock user account (disable login).</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Lock single user</span>
+mynas --user --lock john
+
+<span class="token comment"># Lock multiple users</span>
+<span class="token keyword">for</span> user <span class="token keyword">in</span> temp1 temp2 temp3<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --user --lock <span class="token variable">$user</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Lock expired accounts</span>
+mynas --user --list <span class="token operator">|</span> <span class="token function">grep</span> expired <span class="token operator">|</span> <span class="token keyword">while</span> <span class="token function">read</span> user<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --user --lock <span class="token variable">$user</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="user---unlock-username"><strong>–user --unlock &lt;username&gt;</strong></h3>
+<p>Unlock user account.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Unlock single user</span>
+mynas --user --unlock john
+
+<span class="token comment"># Unlock after maintenance</span>
+mynas --user --unlock service_account
+
+<span class="token comment"># Batch unlock</span>
+<span class="token keyword">echo</span> <span class="token string">"user1 user2 user3"</span> <span class="token operator">|</span> <span class="token function">xargs</span> -n1 mynas --user --unlock
+</code></pre>
+<h3 id="user---info-username"><strong>–user --info &lt;username&gt;</strong></h3>
+<p>Show detailed user information.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show user details</span>
+mynas --user --info john
+
+<span class="token comment"># Show multiple users</span>
+<span class="token keyword">for</span> user <span class="token keyword">in</span> john mary admin<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== <span class="token variable">$user</span> ==="</span>
+    mynas --user --info <span class="token variable">$user</span>
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Extract specific information</span>
+mynas --user --info john <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"Last login"</span>
+</code></pre>
+<hr>
+<h2 id="👥-group-management">👥 <strong>GROUP MANAGEMENT</strong></h2>
+<h3 id="group---create-groupname"><strong>–group --create &lt;groupname&gt;</strong></h3>
+<p>Create a new group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create single group</span>
+mynas --group --create developers
+mynas --group --create managers
+mynas --group --create finance
+
+<span class="token comment"># Create department groups</span>
+mynas --group --create dept_it
+mynas --group --create dept_hr
+mynas --group --create dept_finance
+
+<span class="token comment"># Create project groups</span>
+mynas --group --create project_alpha
+mynas --group --create project_beta
+mynas --group --create project_gamma
+</code></pre>
+<h3 id="group---delete-groupname"><strong>–group --delete &lt;groupname&gt;</strong></h3>
+<p>Delete an existing group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Delete single group</span>
+mynas --group --delete old_group
+
+<span class="token comment"># Delete temporary groups</span>
+mynas --group --delete temp_project
+mynas --group --delete test_group
+
+<span class="token comment"># Delete with confirmation</span>
+<span class="token function">read</span> -p <span class="token string">"Delete group 'obsolete'? (y/n): "</span> <span class="token operator">&amp;&amp;</span> <span class="token punctuation">[</span><span class="token punctuation">[</span> <span class="token variable">$REPLY</span> <span class="token operator">==</span> <span class="token punctuation">[</span>Yy<span class="token punctuation">]</span> <span class="token punctuation">]</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span> mynas --group --delete obsolete
+</code></pre>
+<h3 id="group---adduser-groupname-username"><strong>–group --adduser &lt;groupname&gt; &lt;username&gt;</strong></h3>
+<p>Add user to a group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add single user to group</span>
+mynas --group --adduser developers john
+mynas --group --adduser managers mary
+
+<span class="token comment"># Add multiple users to same group</span>
+<span class="token keyword">for</span> user <span class="token keyword">in</span> alice bob charlie<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --group --adduser developers <span class="token variable">$user</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Add user to multiple groups</span>
+mynas --group --adduser developers dave
+mynas --group --addusers <span class="token function">sudo</span> dave
+mynas --group --adduser docker dave
+</code></pre>
+<h3 id="group---removeuser-groupname-username"><strong>–group --removeuser &lt;groupname&gt; &lt;username&gt;</strong></h3>
+<p>Remove user from a group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove single user from group</span>
+mynas --group --removeuser developers john
+
+<span class="token comment"># Remove user from multiple groups</span>
+mynas --group --removeuser developers old_user
+mynas --group --removeuser managers old_user
+mynas --group --removeuser <span class="token function">sudo</span> old_user
+
+<span class="token comment"># Batch removal</span>
+<span class="token keyword">echo</span> <span class="token string">"user1 user2 user3"</span> <span class="token operator">|</span> <span class="token function">xargs</span> -n1 mynas --group --removeuser temporary_group
+</code></pre>
+<h3 id="group---list-groupname"><strong>–group --list [groupname]</strong></h3>
+<p>List all groups or members of specific group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all groups</span>
+mynas --group --list
+
+<span class="token comment"># List specific group members</span>
+mynas --group --list developers
+mynas --group --list managers
+
+<span class="token comment"># List and filter</span>
+mynas --group --list <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"dept_"</span>
+mynas --group --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"(admin|sudo|wheel)"</span>
+
+<span class="token comment"># Count groups</span>
+mynas --group --list <span class="token operator">|</span> <span class="token function">wc</span> -l
+</code></pre>
+<h3 id="group---setowner-groupname-username"><strong>–group --setowner &lt;groupname&gt; &lt;username&gt;</strong></h3>
+<p>Set group ownership and create group directory.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set owner for department group</span>
+mynas --group --setowner developers team_lead
+mynas --group --setowners managers department_head
+
+<span class="token comment"># Set owner with directory creation</span>
+mynas --group --setowner project_alpha project_manager
+
+<span class="token comment"># Set owner for all department groups</span>
+<span class="token keyword">for</span> dept <span class="token keyword">in</span> it hr finance<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --group --setowner dept_<span class="token variable">${dept}</span> <span class="token variable">${dept}</span>_manager
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="🔐-access-policy-management">🔐 <strong>ACCESS POLICY MANAGEMENT</strong></h2>
+<h3 id="policy---create-policy_name-group-path-permissions-recursive"><strong>–policy --create &lt;policy_name&gt; &lt;group&gt; &lt;path&gt; &lt;permissions&gt; [recursive]</strong></h3>
+<p>Create access control policy.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create read-write policy for developers</span>
+mynas --policy --create dev_access developers /mnt/nas/projects rw <span class="token function">yes</span>
+
+<span class="token comment"># Create read-only policy for guests</span>
+mynas --policy --create guest_access guests /mnt/nas/public r no
+
+<span class="token comment"># Create execute policy for admins</span>
+mynas --policy --create admin_access nasadmin /mnt/nas/scripts rwx <span class="token function">yes</span>
+
+<span class="token comment"># Create no-access policy</span>
+mynas --policy --create deny_access temporary /mnt/nas/secure none no
+
+<span class="token comment"># Create department policies</span>
+mynas --policy --create it_access dept_it /mnt/nas/departments/it rw <span class="token function">yes</span>
+mynas --policy --create hr_access dept_hr /mnt/nas/departments/hr r <span class="token function">yes</span>
+</code></pre>
+<h3 id="policy---delete-policy_name"><strong>–policy --delete &lt;policy_name&gt;</strong></h3>
+<p>Delete access policy.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Delete single policy</span>
+mynas --policy --delete old_policy
+
+<span class="token comment"># Delete multiple policies</span>
+<span class="token keyword">for</span> policy <span class="token keyword">in</span> temp1 temp2 obsolete<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --policy --delete <span class="token variable">$policy</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Delete with pattern</span>
+mynas --policy --list <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"test_"</span> <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'{print <span class="token variable">$1</span>}'</span> <span class="token operator">|</span> <span class="token function">xargs</span> -n1 mynas --policy --delete
+</code></pre>
+<h3 id="policy---apply-policy_name"><strong>–policy --apply &lt;policy_name&gt;</strong></h3>
+<p>Apply specific policy to filesystem.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Apply single policy</span>
+mynas --policy --apply dev_access
+
+<span class="token comment"># Apply multiple policies</span>
+mynas --policy --apply dev_access <span class="token operator">&amp;&amp;</span> mynas --policy --apply mgr_access
+
+<span class="token comment"># Apply policies after changes</span>
+mynas --policy --apply <span class="token punctuation">$(</span>mynas --policy --list <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"_access"</span> <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'{print <span class="token variable">$1</span>}'</span><span class="token punctuation">)</span>
+</code></pre>
+<h3 id="policy---applyall"><strong>–policy --applyall</strong></h3>
+<p>Apply all configured policies.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Apply all policies</span>
+mynas --policy --applyall
+
+<span class="token comment"># Apply all after configuration changes</span>
+<span class="token keyword">echo</span> <span class="token string">"=== Applying all policies ==="</span>
+mynas --policy --applyall
+<span class="token keyword">echo</span> <span class="token string">"=== Policies applied successfully ==="</span>
+
+<span class="token comment"># Schedule regular policy application</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 2 * * * /usr/local/bin/mynas --policy --applyall"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<h3 id="policy---list-policy_name"><strong>–policy --list [policy_name]</strong></h3>
+<p>List all policies or specific policy details.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all policies</span>
+mynas --policy --list
+
+<span class="token comment"># List specific policy</span>
+mynas --policy --list dev_access
+
+<span class="token comment"># List with filtering</span>
+mynas --policy --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"(rw|rwx)"</span>
+mynas --policy --list <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"developers"</span>
+
+<span class="token comment"># Export policies to file</span>
+mynas --policy --list <span class="token operator">&gt;</span> /etc/mynas/policies_backup_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.txt
+</code></pre>
+<h3 id="policy---test-username-path"><strong>–policy --test &lt;username&gt; &lt;path&gt;</strong></h3>
+<p>Test user access to specific path.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Test user access</span>
+mynas --policy --test john /mnt/nas/projects
+mynas --policy --test mary /mnt/nas/confidential
+
+<span class="token comment"># Test multiple users</span>
+<span class="token keyword">for</span> user <span class="token keyword">in</span> john mary bob<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== Testing <span class="token variable">$user</span> ==="</span>
+    mynas --policy --test <span class="token variable">$user</span> /mnt/nas/shared
+<span class="token keyword">done</span>
+
+<span class="token comment"># Test access for all users</span>
+mynas --user --list <span class="token operator">|</span> <span class="token keyword">while</span> <span class="token function">read</span> user<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"User: <span class="token variable">$user</span>"</span>
+    mynas --policy --test <span class="token variable">$user</span> /mnt/nas/data
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="💾-storage-management">💾 <strong>STORAGE MANAGEMENT</strong></h2>
+<h3 id="storage---list"><strong>–storage --list</strong></h3>
+<p>List all storage devices.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all storage devices</span>
+mynas --storage --list
+
+<span class="token comment"># List only disks (no partitions)</span>
+mynas --storage --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"^sd[a-z] "</span>
+
+<span class="token comment"># List mounted filesystems</span>
+mynas --storage --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"/mnt/|/media/"</span>
+
+<span class="token comment"># Export storage list</span>
+mynas --storage --list <span class="token operator">&gt;</span> /var/log/mynas/storage_inventory_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.log
+</code></pre>
+<h3 id="storage---format-device-filesystem"><strong>–storage --format &lt;device&gt; [filesystem]</strong></h3>
+<p>Format storage device.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Format with default filesystem (ext4)</span>
+mynas --storage --format /dev/sdb1
+
+<span class="token comment"># Format with specific filesystem</span>
+mynas --storage --format /dev/sdc1 ext4
+mynas --storage --format /dev/sdd1 xfs
+mynas --storage --format /dev/nvme0n1p1 btrfs
+
+<span class="token comment"># Format multiple devices</span>
+<span class="token keyword">for</span> device <span class="token keyword">in</span> /dev/sdb1 /dev/sdc1 /dev/sdd1<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --storage --format <span class="token variable">$device</span> ext4
+<span class="token keyword">done</span>
+
+<span class="token comment"># Format with label</span>
+mynas --storage --format /dev/sdb1 ext4 <span class="token operator">&amp;&amp;</span> mynas --fs-advanced --label /dev/sdb1 <span class="token string">"DATA_VOLUME"</span>
+</code></pre>
+<h3 id="storage---mount-device-mountpoint"><strong>–storage --mount &lt;device&gt; &lt;mountpoint&gt;</strong></h3>
+<p>Mount storage device.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Mount single device</span>
+mynas --storage --mount /dev/sdb1 /mnt/data
+
+<span class="token comment"># Mount with specific options</span>
+mynas --storage --mount /dev/sdc1 /mnt/backup
+mynas --storage --mount /dev/md0 /mnt/raid
+
+<span class="token comment"># Mount multiple devices</span>
+mynas --storage --mount /dev/vg_data/lv_storage /mnt/nas/data
+mynas --storage --mount /dev/vg_data/lv_backup /mnt/nas/backup
+
+<span class="token comment"># Mount network shares</span>
+mynas --storage --mount //server/share /mnt/smb -o username<span class="token operator">=</span>user,password<span class="token operator">=</span>pass
+</code></pre>
+<h3 id="storage---umount-mountpoint"><strong>–storage --umount &lt;mountpoint&gt;</strong></h3>
+<p>Unmount storage device.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Unmount single mountpoint</span>
+mynas --storage --umount /mnt/data
+
+<span class="token comment"># Unmount multiple mountpoints</span>
+<span class="token keyword">for</span> <span class="token function">mount</span> <span class="token keyword">in</span> /mnt/data /mnt/backup /mnt/temp<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --storage --umount <span class="token variable">$mount</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Force unmount</span>
+mynas --storage --umount /mnt/stuck -f
+</code></pre>
+<h3 id="storage---info-device"><strong>–storage --info &lt;device&gt;</strong></h3>
+<p>Show detailed device information.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show info for single device</span>
+mynas --storage --info /dev/sda
+
+<span class="token comment"># Show info for all disks</span>
+<span class="token keyword">for</span> disk <span class="token keyword">in</span> /dev/sd<span class="token punctuation">[</span>a-z<span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== <span class="token variable">$disk</span> ==="</span>
+    mynas --storage --info <span class="token variable">$disk</span>
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Show SMART information only</span>
+mynas --storage --info /dev/sdb <span class="token operator">|</span> <span class="token function">grep</span> -A20 <span class="token string">"SMART"</span>
+</code></pre>
+<hr>
+<h2 id="🛡️-raid-management">🛡️ <strong>RAID MANAGEMENT</strong></h2>
+<h3 id="raid---create-level-devices-name"><strong>–raid --create &lt;level&gt; &lt;devices&gt; [name]</strong></h3>
+<p>Create RAID array.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># RAID 0 (Striping)</span>
+mynas --raid --create 0 /dev/sdb /dev/sdc md0
+
+<span class="token comment"># RAID 1 (Mirroring)</span>
+mynas --raid --create 1 /dev/sdb /dev/sdc md1
+
+<span class="token comment"># RAID 5 (Parity)</span>
+mynas --raid --create 5 /dev/sdb /dev/sdc /dev/sdd md5
+
+<span class="token comment"># RAID 6 (Double Parity)</span>
+mynas --raid --create 6 /dev/sdb /dev/sdc /dev/sdd /dev/sde md6
+
+<span class="token comment"># RAID 10 (Striped Mirrors)</span>
+mynas --raid --create 10 /dev/sdb /dev/sdc /dev/sdd /dev/sde md10
+
+<span class="token comment"># With custom name</span>
+mynas --raid --create 1 /dev/sdb /dev/sdc nas_raid
+
+<span class="token comment"># Multiple RAID arrays</span>
+mynas --raid --create 1 /dev/sdf /dev/sdg backup_raid
+mynas --raid --create 0 /dev/sdh /dev/sdi cache_raid
+</code></pre>
+<h3 id="raid---add-array-device"><strong>–raid --add &lt;array&gt; &lt;device&gt;</strong></h3>
+<p>Add device to RAID array.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add spare disk to array</span>
+mynas --raid --add md0 /dev/sde
+
+<span class="token comment"># Add multiple spares</span>
+<span class="token keyword">for</span> spare <span class="token keyword">in</span> /dev/sdf /dev/sdg<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --raid --add md0 <span class="token variable">$spare</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Add device as hot spare</span>
+mynas --raid --add md0 /dev/sdh --spare
+</code></pre>
+<h3 id="raid---remove-array-device"><strong>–raid --remove &lt;array&gt; &lt;device&gt;</strong></h3>
+<p>Remove device from RAID array.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove failed device</span>
+mynas --raid --remove md0 /dev/sdb
+
+<span class="token comment"># Remove multiple devices</span>
+<span class="token keyword">for</span> device <span class="token keyword">in</span> /dev/sdc /dev/sdd<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --raid --remove md0 <span class="token variable">$device</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Mark device as failed then remove</span>
+mynas --raid --remove md0 /dev/sdb --fail-first
+</code></pre>
+<h3 id="raid---stop-array"><strong>–raid --stop &lt;array&gt;</strong></h3>
+<p>Stop RAID array.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Stop single array</span>
+mynas --raid --stop md0
+
+<span class="token comment"># Stop all arrays</span>
+<span class="token keyword">for</span> array <span class="token keyword">in</span> /dev/md*<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --raid --stop <span class="token variable"><span class="token variable">$(</span><span class="token function">basename</span> $array<span class="token variable">)</span></span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Stop for maintenance</span>
+mynas --raid --stop nas_raid <span class="token operator">&amp;&amp;</span> <span class="token keyword">echo</span> <span class="token string">"RAID stopped for maintenance"</span>
+</code></pre>
+<h3 id="raid---status"><strong>–raid --status</strong></h3>
+<p>Show RAID status.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show status of all arrays</span>
+mynas --raid --status
+
+<span class="token comment"># Show detailed status</span>
+mynas --raid --status --detail
+
+<span class="token comment"># Monitor RAID health</span>
+<span class="token function">watch</span> -n 60 <span class="token string">"mynas --raid --status"</span>
+
+<span class="token comment"># Export status to log</span>
+mynas --raid --status <span class="token operator">&gt;</span> /var/log/mynas/raid_status_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.log
+</code></pre>
+<h3 id="raid---save"><strong>–raid --save</strong></h3>
+<p>Save RAID configuration.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Save current configuration</span>
+mynas --raid --save
+
+<span class="token comment"># Save and backup config</span>
+mynas --raid --save <span class="token operator">&amp;&amp;</span> <span class="token function">cp</span> /etc/mdadm/mdadm.conf /etc/mdadm/mdadm.conf.backup
+
+<span class="token comment"># Schedule regular saves</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 3 * * * /usr/local/bin/mynas --raid --save"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<hr>
+<h2 id="🔧-lvm-management">🔧 <strong>LVM MANAGEMENT</strong></h2>
+<h3 id="lvm---create-pv-device"><strong>–lvm --create-pv &lt;device&gt;</strong></h3>
+<p>Create physical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create PV on single disk</span>
+mynas --lvm --create-pv /dev/sdb
+
+<span class="token comment"># Create PV on multiple disks</span>
+<span class="token keyword">for</span> disk <span class="token keyword">in</span> /dev/sdc /dev/sdd /dev/sde<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --create-pv <span class="token variable">$disk</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Create PV on RAID array</span>
+mynas --lvm --create-pv /dev/md0
+</code></pre>
+<h3 id="lvm---create-vg-name-physical_volumes"><strong>–lvm --create-vg &lt;name&gt; &lt;physical_volumes&gt;</strong></h3>
+<p>Create volume group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create VG with single PV</span>
+mynas --lvm --create-vg vg_data /dev/sdb
+
+<span class="token comment"># Create VG with multiple PVs</span>
+mynas --lvm --create-vg vg_storage /dev/sdc /dev/sdd /dev/sde
+
+<span class="token comment"># Create VG on RAID</span>
+mynas --lvm --create-vg vg_raid /dev/md0 /dev/md1
+
+<span class="token comment"># Create multiple VGs</span>
+mynas --lvm --create-vg vg_apps /dev/sdf
+mynas --lvm --create-vg vg_backup /dev/sdg
+</code></pre>
+<h3 id="lvm---create-lv-vg-name-size"><strong>–lvm --create-lv &lt;vg&gt; &lt;name&gt; &lt;size&gt;</strong></h3>
+<p>Create logical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create LV with exact size</span>
+mynas --lvm --create-lv vg_data lv_storage 100G
+
+<span class="token comment"># Create LV using all free space</span>
+mynas --lvm --create-lv vg_data lv_backup 100%FREE
+
+<span class="token comment"># Create multiple LVs</span>
+mynas --lvm --create-lv vg_data lv_home 50G
+mynas --lvm --create-lv vg_data lv_var 20G
+mynas --lvm --create-lv vg_data lv_tmp 10G
+
+<span class="token comment"># Create thin provisioned LV</span>
+mynas --lvm --create-lv vg_data lv_vms 500G --thin
+</code></pre>
+<h3 id="lvm---extend-lv-lv_path-size"><strong>–lvm --extend-lv &lt;lv_path&gt; &lt;size&gt;</strong></h3>
+<p>Extend logical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Extend by specific amount</span>
+mynas --lvm --extend-lv /dev/vg_data/lv_storage +50G
+
+<span class="token comment"># Extend to specific size</span>
+mynas --lvm --extend-lv /dev/vg_data/lv_storage 200G
+
+<span class="token comment"># Extend using percentage</span>
+mynas --lvm --extend-lv /dev/vg_data/lv_storage +25%FREE
+
+<span class="token comment"># Extend multiple LVs</span>
+<span class="token keyword">for</span> lv <span class="token keyword">in</span> /dev/vg_data/lv_home /dev/vg_data/lv_var<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --extend-lv <span class="token variable">$lv</span> +10G
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="lvm---reduce-lv-lv_path-size"><strong>–lvm --reduce-lv &lt;lv_path&gt; &lt;size&gt;</strong></h3>
+<p>Reduce logical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Reduce by specific amount</span>
+mynas --lvm --reduce-lv /dev/vg_data/lv_storage -20G
+
+<span class="token comment"># Reduce to specific size</span>
+mynas --lvm --reduce-lv /dev/vg_data/lv_storage 80G
+
+<span class="token comment"># Reduce multiple LVs</span>
+<span class="token keyword">for</span> lv <span class="token keyword">in</span> /dev/vg_data/lv_temp /dev/vg_data/lv_cache<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --reduce-lv <span class="token variable">$lv</span> -5G
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="lvm---list-pv"><strong>–lvm --list-pv</strong></h3>
+<p>List physical volumes.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all PVs</span>
+mynas --lvm --list-pv
+
+<span class="token comment"># List with details</span>
+mynas --lvm --list-pv --detail
+
+<span class="token comment"># Export PV list</span>
+mynas --lvm --list-pv <span class="token operator">&gt;</span> /var/log/mynas/pv_list_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.log
+</code></pre>
+<h3 id="lvm---list-vg"><strong>–lvm --list-vg</strong></h3>
+<p>List volume groups.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all VGs</span>
+mynas --lvm --list-vg
+
+<span class="token comment"># List specific VG</span>
+mynas --lvm --list-vg vg_data
+
+<span class="token comment"># List with free space</span>
+mynas --lvm --list-vg <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"VG Name|Free"</span>
+</code></pre>
+<h3 id="lvm---list-lv"><strong>–lvm --list-lv</strong></h3>
+<p>List logical volumes.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all LVs</span>
+mynas --lvm --list-lv
+
+<span class="token comment"># List LVs in specific VG</span>
+mynas --lvm --list-lv vg_data
+
+<span class="token comment"># List with attributes</span>
+mynas --lvm --list-lv --segments
+</code></pre>
+<h3 id="lvm---remove-lv-lv_path"><strong>–lvm --remove-lv &lt;lv_path&gt;</strong></h3>
+<p>Remove logical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove single LV</span>
+mynas --lvm --remove-lv /dev/vg_data/lv_old
+
+<span class="token comment"># Remove multiple LVs</span>
+<span class="token keyword">for</span> lv <span class="token keyword">in</span> /dev/vg_data/lv_temp1 /dev/vg_data/lv_temp2<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --remove-lv <span class="token variable">$lv</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Force remove</span>
+mynas --lvm --remove-lv /dev/vg_data/lv_corrupt --force
+</code></pre>
+<h3 id="lvm---remove-vg-vg_name"><strong>–lvm --remove-vg &lt;vg_name&gt;</strong></h3>
+<p>Remove volume group.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove VG</span>
+mynas --lvm --remove-vg vg_old
+
+<span class="token comment"># Remove multiple VGs</span>
+<span class="token keyword">for</span> vg <span class="token keyword">in</span> vg_temp vg_test<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --remove-vg <span class="token variable">$vg</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="lvm---remove-pv-pv_device"><strong>–lvm --remove-pv &lt;pv_device&gt;</strong></h3>
+<p>Remove physical volume.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove PV</span>
+mynas --lvm --remove-pv /dev/sdb
+
+<span class="token comment"># Remove multiple PVs</span>
+<span class="token keyword">for</span> <span class="token function">pv</span> <span class="token keyword">in</span> /dev/sdc /dev/sdd<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --lvm --remove-pv <span class="token variable">$pv</span>
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="📁-filesystem-management">📁 <strong>FILESYSTEM MANAGEMENT</strong></h2>
+<h3 id="fs-advanced---resize-device-size"><strong>–fs-advanced --resize &lt;device&gt; [size]</strong></h3>
+<p>Resize filesystem.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Resize to maximum</span>
+mynas --fs-advanced --resize /dev/vg_data/lv_storage
+
+<span class="token comment"># Resize to specific size</span>
+mynas --fs-advanced --resize /dev/vg_data/lv_storage 150G
+
+<span class="token comment"># Resize multiple filesystems</span>
+<span class="token keyword">for</span> fs <span class="token keyword">in</span> /dev/vg_data/lv_home /dev/vg_data/lv_var<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --fs-advanced --resize <span class="token variable">$fs</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Resize after LVM extension</span>
+mynas --lvm --extend-lv /dev/vg_data/lv_storage +50G
+mynas --fs-advanced --resize /dev/vg_data/lv_storage
+</code></pre>
+<h3 id="fs-advanced---check-device-filesystem"><strong>–fs-advanced --check &lt;device&gt; [filesystem]</strong></h3>
+<p>Check filesystem integrity.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check ext4 filesystem</span>
+mynas --fs-advanced --check /dev/sdb1
+mynas --fs-advanced --check /dev/sdb1 ext4
+
+<span class="token comment"># Check xfs filesystem</span>
+mynas --fs-advanced --check /dev/sdc1 xfs
+
+<span class="token comment"># Check btrfs filesystem</span>
+mynas --fs-advanced --check /dev/sdd1 btrfs
+
+<span class="token comment"># Check all mounted filesystems</span>
+<span class="token function">mount</span> <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"^/dev"</span> <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'{print <span class="token variable">$1</span>}'</span> <span class="token operator">|</span> <span class="token keyword">while</span> <span class="token function">read</span> device<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"Checking <span class="token variable">$device</span>"</span>
+    mynas --fs-advanced --check <span class="token variable">$device</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="fs-advanced---label-device-label-filesystem"><strong>–fs-advanced --label &lt;device&gt; &lt;label&gt; [filesystem]</strong></h3>
+<p>Set filesystem label.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Label ext4 filesystem</span>
+mynas --fs-advanced --label /dev/sdb1 <span class="token string">"DATA_VOLUME"</span>
+mynas --fs-advanced --label /dev/sdb1 <span class="token string">"DATA_VOLUME"</span> ext4
+
+<span class="token comment"># Label xfs filesystem</span>
+mynas --fs-advanced --label /dev/sdc1 <span class="token string">"BACKUP_VOLUME"</span> xfs
+
+<span class="token comment"># Label btrfs filesystem</span>
+mynas --fs-advanced --label /dev/sdd1 <span class="token string">"MEDIA_STORAGE"</span> btrfs
+
+<span class="token comment"># Label all data volumes</span>
+<span class="token keyword">for</span> i <span class="token keyword">in</span> <span class="token punctuation">{</span>1<span class="token punctuation">..</span>4<span class="token punctuation">}</span><span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --fs-advanced --label /dev/sd<span class="token variable">${i}</span>1 <span class="token string">"DATA_<span class="token variable">${i}</span>"</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="fs-advanced---tune-device-option-value"><strong>–fs-advanced --tune &lt;device&gt; &lt;option&gt; &lt;value&gt;</strong></h3>
+<p>Tune filesystem parameters.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set reserved blocks percentage</span>
+mynas --fs-advanced --tune /dev/sdb1 reserved 1
+
+<span class="token comment"># Set maximum mount count</span>
+mynas --fs-advanced --tune /dev/sdb1 mounts 30
+
+<span class="token comment"># Set check interval</span>
+mynas --fs-advanced --tune /dev/sdb1 interval 2w
+mynas --fs-advanced --tune /dev/sdb1 interval 180d
+
+<span class="token comment"># Enable/disable features</span>
+mynas --fs-advanced --tune /dev/sdb1 has_journal 1
+mynas --fs-advanced --tune /dev/sdb1 dir_index 1
+</code></pre>
+<h3 id="fs-advanced---defrag-mountpoint"><strong>–fs-advanced --defrag &lt;mountpoint&gt;</strong></h3>
+<p>Defragment filesystem.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Defragment mount point</span>
+mynas --fs-advanced --defrag /mnt/nas
+
+<span class="token comment"># Defragment multiple mounts</span>
+<span class="token keyword">for</span> <span class="token function">mount</span> <span class="token keyword">in</span> /mnt/nas/data /mnt/nas/shared<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --fs-advanced --defrag <span class="token variable">$mount</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Schedule defragmentation</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 4 * * 0 /usr/local/bin/mynas --fs-advanced --defrag /mnt/nas"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<h3 id="fs-advanced---swap-device-action"><strong>–fs-advanced --swap &lt;device&gt; &lt;action&gt;</strong></h3>
+<p>Manage swap space.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create swap space</span>
+mynas --fs-advanced --swap /dev/sdb2 create
+
+<span class="token comment"># Enable existing swap</span>
+mynas --fs-advanced --swap /dev/sdb2 <span class="token function">enable</span>
+
+<span class="token comment"># Disable swap</span>
+mynas --fs-advanced --swap /dev/sdb2 disable
+
+<span class="token comment"># Remove swap from system</span>
+mynas --fs-advanced --swap /dev/sdb2 remove
+
+<span class="token comment"># Check swap status</span>
+mynas --fs-advanced --swap /dev/sdb2 status
+
+<span class="token comment"># Create swap file instead of partition</span>
+mynas --fs-advanced --swap /swapfile create --file 4G
+</code></pre>
+<hr>
+<h2 id="📤-share-management">📤 <strong>SHARE MANAGEMENT</strong></h2>
+<h3 id="share---create-name-path-owner_group-access_groups-permissions"><strong>–share --create &lt;name&gt; &lt;path&gt; &lt;owner_group&gt; &lt;access_groups&gt; [permissions]</strong></h3>
+<p>Create managed share.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create share with default permissions (rw)</span>
+mynas --share --create projects /mnt/nas/projects developers developers,managers
+
+<span class="token comment"># Create share with specific permissions</span>
+mynas --share --create backup /mnt/nas/backup nasadmin nasadmin rw
+mynas --share --create media /mnt/nas/media mediausers mediausers,guests r
+mynas --share --create scripts /mnt/nas/scripts admins admins,developers rwx
+
+<span class="token comment"># Create department shares</span>
+mynas --share --create it_share /mnt/nas/departments/it dept_it dept_it,managers rw
+mynas --share --create hr_share /mnt/nas/departments/hr dept_hr dept_hr,managers r
+
+<span class="token comment"># Create with multiple access groups</span>
+mynas --share --create shared /mnt/nas/shared nasusers <span class="token string">"developers,managers,finance,hr"</span> rw
+</code></pre>
+<h3 id="share---delete-share_name"><strong>–share --delete &lt;share_name&gt;</strong></h3>
+<p>Delete share.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Delete single share</span>
+mynas --share --delete old_share
+
+<span class="token comment"># Delete multiple shares</span>
+<span class="token keyword">for</span> share <span class="token keyword">in</span> temp_test obsolete_share<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --share --delete <span class="token variable">$share</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Delete with confirmation</span>
+mynas --share --list <span class="token operator">|</span> <span class="token function">grep</span> <span class="token string">"test_"</span> <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'{print <span class="token variable">$1</span>}'</span> <span class="token operator">|</span> <span class="token keyword">while</span> <span class="token function">read</span> share<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token function">read</span> -p <span class="token string">"Delete <span class="token variable">$share?</span> (y/n): "</span> <span class="token operator">&amp;&amp;</span> <span class="token punctuation">[</span><span class="token punctuation">[</span> <span class="token variable">$REPLY</span> <span class="token operator">==</span> <span class="token punctuation">[</span>Yy<span class="token punctuation">]</span> <span class="token punctuation">]</span><span class="token punctuation">]</span> <span class="token operator">&amp;&amp;</span> mynas --share --delete <span class="token variable">$share</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="share---addgroup-share_name-group"><strong>–share --addgroup &lt;share_name&gt; &lt;group&gt;</strong></h3>
+<p>Add group to share access.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add single group to share</span>
+mynas --share --addgroup projects managers
+mynas --share --addgroup backup auditors
+
+<span class="token comment"># Add multiple groups</span>
+<span class="token keyword">for</span> group <span class="token keyword">in</span> finance hr legal<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --share --addgroup shared_docs <span class="token variable">$group</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Add temporary access</span>
+mynas --share --addgroup project_alpha contractors
+</code></pre>
+<h3 id="share---removegroup-share_name-group"><strong>–share --removegroup &lt;share_name&gt; &lt;group&gt;</strong></h3>
+<p>Remove group from share access.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove single group</span>
+mynas --share --removegroup projects temporary
+
+<span class="token comment"># Remove multiple groups</span>
+<span class="token keyword">for</span> group <span class="token keyword">in</span> old_dept expired_contractors<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --share --removegroup shared <span class="token variable">$group</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Clean up access</span>
+mynas --share --removegroup project_beta completed_team
+</code></pre>
+<h3 id="share---list"><strong>–share --list</strong></h3>
+<p>List all shares.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all shares</span>
+mynas --share --list
+
+<span class="token comment"># List with details</span>
+mynas --share --list --detail
+
+<span class="token comment"># Filter shares</span>
+mynas --share --list <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"(projects|shared)"</span>
+
+<span class="token comment"># Export share configuration</span>
+mynas --share --list <span class="token operator">&gt;</span> /etc/mynas/shares_backup_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.conf
+</code></pre>
+<h3 id="share---info-share_name"><strong>–share --info &lt;share_name&gt;</strong></h3>
+<p>Show share details.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show single share info</span>
+mynas --share --info projects
+
+<span class="token comment"># Show multiple shares</span>
+<span class="token keyword">for</span> share <span class="token keyword">in</span> <span class="token punctuation">$(</span>mynas --share --list <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'{print <span class="token variable">$1</span>}'</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== <span class="token variable">$share</span> ==="</span>
+    mynas --share --info <span class="token variable">$share</span>
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Show specific information</span>
+mynas --share --info backup <span class="token operator">|</span> <span class="token function">grep</span> -E <span class="token string">"(Path|Groups|Permissions)"</span>
+</code></pre>
+<hr>
+<h2 id="🖥️-samba-management">🖥️ <strong>SAMBA MANAGEMENT</strong></h2>
+<h3 id="samba---install"><strong>–samba --install</strong></h3>
+<p>Install and configure Samba.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Install Samba</span>
+mynas --samba --install
+
+<span class="token comment"># Install with specific version</span>
+mynas --samba --install --version 4.13
+
+<span class="token comment"># Install and start service</span>
+mynas --samba --install <span class="token operator">&amp;&amp;</span> systemctl start smbd nmbd
+
+<span class="token comment"># Install on specific interface</span>
+mynas --samba --install --interface eth0
+</code></pre>
+<h3 id="samba---add-share-name-path-users-writable"><strong>–samba --add-share &lt;name&gt; &lt;path&gt; &lt;users&gt; [writable]</strong></h3>
+<p>Add Samba share.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add writable share</span>
+mynas --samba --add-share Data /mnt/nas/data nasusers <span class="token function">yes</span>
+
+<span class="token comment"># Add read-only share</span>
+mynas --samba --add-share Public /mnt/nas/public all no
+
+<span class="token comment"># Add share with specific users</span>
+mynas --samba --add-share Projects /mnt/nas/projects <span class="token string">"john,mary,bob"</span> <span class="token function">yes</span>
+
+<span class="token comment"># Add share with group access</span>
+mynas --samba --add-share Backup /mnt/nas/backup <span class="token string">"@nasadmin"</span> <span class="token function">yes</span>
+
+<span class="token comment"># Add share with guest access</span>
+mynas --samba --add-share Downloads /mnt/nas/downloads guest <span class="token function">yes</span>
+</code></pre>
+<hr>
+<h2 id="🌐-nfs-management">🌐 <strong>NFS MANAGEMENT</strong></h2>
+<h3 id="nfs---install"><strong>–nfs --install</strong></h3>
+<p>Install and configure NFS server.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Install NFS</span>
+mynas --nfs --install
+
+<span class="token comment"># Install specific version</span>
+mynas --nfs --install --version 4
+
+<span class="token comment"># Install and enable</span>
+mynas --nfs --install <span class="token operator">&amp;&amp;</span> systemctl <span class="token function">enable</span> nfs-server
+
+<span class="token comment"># Install with kerberos support</span>
+mynas --nfs --install --kerberos
+</code></pre>
+<h3 id="nfs---add-share-path-clients-options"><strong>–nfs --add-share &lt;path&gt; &lt;clients&gt; [options]</strong></h3>
+<p>Add NFS share.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add share for specific network</span>
+mynas --nfs --add-share /mnt/nas/data 192.168.1.0/24
+
+<span class="token comment"># Add share with specific options</span>
+mynas --nfs --add-share /mnt/nas/data 192.168.1.0/24 <span class="token string">"rw,sync,no_subtree_check,no_root_squash"</span>
+
+<span class="token comment"># Add read-only share</span>
+mynas --nfs --add-share /mnt/nas/public 192.168.1.0/24 <span class="token string">"ro,sync"</span>
+
+<span class="token comment"># Add share for specific host</span>
+mynas --nfs --add-share /mnt/nas/backup 192.168.1.100
+
+<span class="token comment"># Add multiple shares</span>
+<span class="token keyword">for</span> <span class="token function">dir</span> <span class="token keyword">in</span> data shared backup<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --nfs --add-share /mnt/nas/<span class="token variable">$dir</span> 192.168.1.0/24
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="🔑-sshfs-management">🔑 <strong>SSHFS MANAGEMENT</strong></h2>
+<h3 id="sshfs---install"><strong>–sshfs --install</strong></h3>
+<p>Install SSHFS.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Install SSHFS</span>
+mynas --sshfs --install
+
+<span class="token comment"># Install with dependencies</span>
+mynas --sshfs --install --with-fuse
+
+<span class="token comment"># Install specific version</span>
+mynas --sshfs --install --version 3.7
+</code></pre>
+<h3 id="sshfs---mount-user-host-remote_path-local_path"><strong>–sshfs --mount &lt;user&gt; &lt;host&gt; &lt;remote_path&gt; &lt;local_path&gt;</strong></h3>
+<p>Mount SSHFS share.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Mount remote directory</span>
+mynas --sshfs --mount user@server /remote/data /mnt/sshfs/data
+
+<span class="token comment"># Mount with specific options</span>
+mynas --sshfs --mount admin@nas /shared /mnt/nas_remote -o allow_other,default_permissions
+
+<span class="token comment"># Mount using SSH key</span>
+mynas --sshfs --mount user@host /home/user/documents /mnt/docs -o IdentityFile<span class="token operator">=</span>/home/user/.ssh/id_rsa
+
+<span class="token comment"># Mount multiple directories</span>
+mynas --sshfs --mount backup@server /backups/daily /mnt/backups/daily
+mynas --sshfs --mount backup@server /backups/weekly /mnt/backups/weekly
+</code></pre>
+<hr>
+<h2 id="🔥-firewall-management">🔥 <strong>FIREWALL MANAGEMENT</strong></h2>
+<h3 id="firewall---add-port-port-protocol"><strong>–firewall --add-port &lt;port&gt; [protocol]</strong></h3>
+<p>Add port to firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add TCP port</span>
+mynas --firewall --add-port 445
+mynas --firewall --add-port 445 tcp
+
+<span class="token comment"># Add UDP port</span>
+mynas --firewall --add-port 137 udp
+mynas --firewall --add-port 138 udp
+
+<span class="token comment"># Add port range</span>
+mynas --firewall --add-port 8000-9000 tcp
+
+<span class="token comment"># Add multiple ports</span>
+<span class="token keyword">for</span> port <span class="token keyword">in</span> 139 445<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --firewall --add-port <span class="token variable">$port</span> tcp
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="firewall---remove-port-port-protocol"><strong>–firewall --remove-port &lt;port&gt; [protocol]</strong></h3>
+<p>Remove port from firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove TCP port</span>
+mynas --firewall --remove-port 445
+mynas --firewall --remove-port 445 tcp
+
+<span class="token comment"># Remove UDP port</span>
+mynas --firewall --remove-port 137 udp
+
+<span class="token comment"># Remove port range</span>
+mynas --firewall --remove-port 8000-9000 tcp
+</code></pre>
+<h3 id="firewall---add-service-service"><strong>–firewall --add-service &lt;service&gt;</strong></h3>
+<p>Add service to firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add Samba service</span>
+mynas --firewall --add-service samba
+
+<span class="token comment"># Add NFS service</span>
+mynas --firewall --add-service nfs
+mynas --firewall --add-service nfs3
+mynas --firewall --add-service mountd
+mynas --firewall --add-service rpc-bind
+
+<span class="token comment"># Add SSH service</span>
+mynas --firewall --add-service <span class="token function">ssh</span>
+
+<span class="token comment"># Add multiple services</span>
+<span class="token keyword">for</span> <span class="token function">service</span> <span class="token keyword">in</span> samba nfs <span class="token function">ssh</span><span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --firewall --add-service <span class="token variable">$service</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="firewall---remove-service-service"><strong>–firewall --remove-service &lt;service&gt;</strong></h3>
+<p>Remove service from firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove service</span>
+mynas --firewall --remove-service samba
+mynas --firewall --remove-service nfs
+</code></pre>
+<h3 id="firewall---add-source-network"><strong>–firewall --add-source &lt;network&gt;</strong></h3>
+<p>Add network source to firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add specific network</span>
+mynas --firewall --add-source 192.168.1.0/24
+
+<span class="token comment"># Add single IP</span>
+mynas --firewall --add-source 10.0.0.100
+
+<span class="token comment"># Add multiple networks</span>
+<span class="token keyword">for</span> net <span class="token keyword">in</span> 192.168.1.0/24 10.0.0.0/16<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --firewall --add-source <span class="token variable">$net</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="firewall---remove-source-network"><strong>–firewall --remove-source &lt;network&gt;</strong></h3>
+<p>Remove network source from firewall.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Remove network</span>
+mynas --firewall --remove-source 192.168.1.0/24
+
+<span class="token comment"># Remove specific IP</span>
+mynas --firewall --remove-source 10.0.0.100
+</code></pre>
+<h3 id="firewall---list"><strong>–firewall --list</strong></h3>
+<p>List firewall configuration.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all rules</span>
+mynas --firewall --list
+
+<span class="token comment"># List specific zone</span>
+mynas --firewall --list --zone public
+
+<span class="token comment"># List services</span>
+mynas --firewall --list --services
+
+<span class="token comment"># List ports</span>
+mynas --firewall --list --ports
+
+<span class="token comment"># Export configuration</span>
+mynas --firewall --list <span class="token operator">&gt;</span> /etc/firewalld/backup_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.xml
+</code></pre>
+<hr>
+<h2 id="🚫-fail2ban-management">🚫 <strong>FAIL2BAN MANAGEMENT</strong></h2>
+<h3 id="fail2ban---install"><strong>–fail2ban --install</strong></h3>
+<p>Install and configure fail2ban.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Install fail2ban</span>
+mynas --fail2ban --install
+
+<span class="token comment"># Install with email alerts</span>
+mynas --fail2ban --install --email admin@example.com
+
+<span class="token comment"># Install with custom configuration</span>
+mynas --fail2ban --install --config /path/to/custom/jail.local
+</code></pre>
+<h3 id="fail2ban---enable-jail-jail"><strong>–fail2ban --enable-jail &lt;jail&gt;</strong></h3>
+<p>Enable fail2ban jail.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Enable SSH jail</span>
+mynas --fail2ban --enable-jail sshd
+
+<span class="token comment"># Enable Samba jail</span>
+mynas --fail2ban --enable-jail samba
+
+<span class="token comment"># Enable multiple jails</span>
+<span class="token keyword">for</span> jail <span class="token keyword">in</span> sshd samba nginx<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --fail2ban --enable-jail <span class="token variable">$jail</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="fail2ban---disable-jail-jail"><strong>–fail2ban --disable-jail &lt;jail&gt;</strong></h3>
+<p>Disable fail2ban jail.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Disable jail</span>
+mynas --fail2ban --disable-jail sshd
+
+<span class="token comment"># Disable temporary</span>
+mynas --fail2ban --disable-jail samba --temp 3600
+</code></pre>
+<h3 id="fail2ban---status"><strong>–fail2ban --status</strong></h3>
+<p>Show fail2ban status.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Show overall status</span>
+mynas --fail2ban --status
+
+<span class="token comment"># Show specific jail status</span>
+mynas --fail2ban --status sshd
+
+<span class="token comment"># Show banned IPs</span>
+mynas --fail2ban --status --banned
+
+<span class="token comment"># Monitor status</span>
+<span class="token function">watch</span> -n 5 <span class="token string">"mynas --fail2ban --status"</span>
+</code></pre>
+<hr>
+<h2 id="🛡️-antivirus-management">🛡️ <strong>ANTIVIRUS MANAGEMENT</strong></h2>
+<h3 id="av---clamav-path"><strong>–av --clamav &lt;path&gt;</strong></h3>
+<p>Run ClamAV scan.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Scan specific directory</span>
+mynas --av --clamav /mnt/nas
+
+<span class="token comment"># Scan with options</span>
+mynas --av --clamav /mnt/nas --recursive --infected --bell
+
+<span class="token comment"># Scan multiple directories</span>
+<span class="token keyword">for</span> <span class="token function">dir</span> <span class="token keyword">in</span> /mnt/nas/data /mnt/nas/shared<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --av --clamav <span class="token variable">$dir</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Scan and log results</span>
+mynas --av --clamav /mnt/nas --log<span class="token operator">=</span>/var/log/clamav/scan_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.log
+</code></pre>
+<h3 id="av---maldet-path"><strong>–av --maldet &lt;path&gt;</strong></h3>
+<p>Run Maldet scan.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Scan directory</span>
+mynas --av --maldet /mnt/nas
+
+<span class="token comment"># Scan with email alerts</span>
+mynas --av --maldet /mnt/nas --email admin@example.com
+
+<span class="token comment"># Scan and quarantine</span>
+mynas --av --maldet /mnt/nas --quarantine
+</code></pre>
+<h3 id="av---rkhunter"><strong>–av --rkhunter</strong></h3>
+<p>Run Rootkit Hunter scan.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Run full scan</span>
+mynas --av --rkhunter
+
+<span class="token comment"># Run quick scan</span>
+mynas --av --rkhunter --sk --rwo
+
+<span class="token comment"># Run and email report</span>
+mynas --av --rkhunter --report-warnings-only --email admin@example.com
+</code></pre>
+<h3 id="av---chkrootkit"><strong>–av --chkrootkit</strong></h3>
+<p>Run chkrootkit scan.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Run scan</span>
+mynas --av --chkrootkit
+
+<span class="token comment"># Run with specific tests</span>
+mynas --av --chkrootkit --check all
+
+<span class="token comment"># Run and save output</span>
+mynas --av --chkrootkit <span class="token operator">&gt;</span> /var/log/chkrootkit_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.log
+</code></pre>
+<h3 id="av---update-databases"><strong>–av --update-databases</strong></h3>
+<p>Update all AV databases.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Update all databases</span>
+mynas --av --update-databases
+
+<span class="token comment"># Update specific database</span>
+mynas --av --update-databases clamav
+mynas --av --update-databases maldet
+
+<span class="token comment"># Schedule updates</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 3 * * * /usr/local/bin/mynas --av --update-databases"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<h3 id="av---clamav-schedule-path"><strong>–av --clamav-schedule &lt;path&gt;</strong></h3>
+<p>Schedule ClamAV scan.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Schedule weekly scan</span>
+mynas --av --clamav-schedule /mnt/nas
+
+<span class="token comment"># Schedule daily scan</span>
+mynas --av --clamav-schedule /mnt/nas --daily
+
+<span class="token comment"># Schedule with email report</span>
+mynas --av --clamav-schedule /mnt/nas --email admin@example.com
+</code></pre>
+<h3 id="av---maldet-monitor-path"><strong>–av --maldet-monitor &lt;path&gt;</strong></h3>
+<p>Enable Maldet monitoring.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Enable monitoring</span>
+mynas --av --maldet-monitor /mnt/nas
+
+<span class="token comment"># Monitor multiple paths</span>
+<span class="token keyword">for</span> path <span class="token keyword">in</span> /mnt/nas/data /mnt/nas/shared<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --av --maldet-monitor <span class="token variable">$path</span>
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="📊-monitoring-management">📊 <strong>MONITORING MANAGEMENT</strong></h2>
+<h3 id="monitor---iostat-interval-count"><strong>–monitor --iostat [interval] [count]</strong></h3>
+<p>Run iostat monitoring.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Run with default settings (2s interval, 5 times)</span>
+mynas --monitor --iostat
+
+<span class="token comment"># Run with custom interval</span>
+mynas --monitor --iostat 5 10
+
+<span class="token comment"># Run extended statistics</span>
+mynas --monitor --iostat -x 2 5
+
+<span class="token comment"># Run continuously</span>
+mynas --monitor --iostat 1 0
+</code></pre>
+<h3 id="monitor---netdata-action"><strong>–monitor --netdata &lt;action&gt;</strong></h3>
+<p>Manage netdata service.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Start netdata</span>
+mynas --monitor --netdata start
+
+<span class="token comment"># Stop netdata</span>
+mynas --monitor --netdata stop
+
+<span class="token comment"># Restart netdata</span>
+mynas --monitor --netdata restart
+
+<span class="token comment"># Check status</span>
+mynas --monitor --netdata status
+
+<span class="token comment"># Enable on boot</span>
+mynas --monitor --netdata <span class="token function">enable</span>
+</code></pre>
+<h3 id="monitor---disk-health"><strong>–monitor --disk-health</strong></h3>
+<p>Check disk health with SMART.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check all disks</span>
+mynas --monitor --disk-health
+
+<span class="token comment"># Check specific disk</span>
+mynas --monitor --disk-health /dev/sda
+
+<span class="token comment"># Check and email report</span>
+mynas --monitor --disk-health --email admin@example.com
+
+<span class="token comment"># Schedule health checks</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 2 * * * /usr/local/bin/mynas --monitor --disk-health"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<hr>
+<h2 id="💾-backup-management">💾 <strong>BACKUP MANAGEMENT</strong></h2>
+<h3 id="backup---tar-source-destination"><strong>–backup --tar &lt;source&gt; [destination]</strong></h3>
+<p>Create tar backup.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Backup directory to default location</span>
+mynas --backup --tar /mnt/nas
+
+<span class="token comment"># Backup to specific location</span>
+mynas --backup --tar /mnt/nas /mnt/backup/nas_backup_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.tar.gz
+
+<span class="token comment"># Backup with compression</span>
+mynas --backup --tar /mnt/nas --gzip
+
+<span class="token comment"># Backup with exclusions</span>
+mynas --backup --tar /mnt/nas --exclude<span class="token operator">=</span><span class="token string">"*.tmp"</span> --exclude<span class="token operator">=</span><span class="token string">"*.log"</span>
+
+<span class="token comment"># Backup multiple directories</span>
+<span class="token keyword">for</span> <span class="token function">dir</span> <span class="token keyword">in</span> /etc /home /var/www<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --backup --tar <span class="token variable">$dir</span> /mnt/backup/<span class="token variable"><span class="token variable">$(</span><span class="token function">basename</span> $dir<span class="token variable">)</span></span>_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.tar.gz
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="backup---zip-source-destination"><strong>–backup --zip &lt;source&gt; [destination]</strong></h3>
+<p>Create zip backup.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create zip backup</span>
+mynas --backup --zip /mnt/nas
+
+<span class="token comment"># Zip with password</span>
+mynas --backup --zip /mnt/nas --password <span class="token string">"secure123"</span>
+
+<span class="token comment"># Zip with compression level</span>
+mynas --backup --zip /mnt/nas --compression 9
+
+<span class="token comment"># Zip specific files</span>
+mynas --backup --zip <span class="token string">"/mnt/nas/*.db"</span> /mnt/backup/databases_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.zip
+</code></pre>
+<h3 id="backup---dd-source-destination"><strong>–backup --dd &lt;source&gt; [destination]</strong></h3>
+<p>Create disk clone.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Clone disk</span>
+mynas --backup --dd /dev/sda
+
+<span class="token comment"># Clone to specific file</span>
+mynas --backup --dd /dev/sda /mnt/backup/disk_clone_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.img
+
+<span class="token comment"># Clone with compression</span>
+mynas --backup --dd /dev/sda --gzip
+
+<span class="token comment"># Clone and verify</span>
+mynas --backup --dd /dev/sda --verify
+</code></pre>
+<hr>
+<h2 id="⚙️-system-management">⚙️ <strong>SYSTEM MANAGEMENT</strong></h2>
+<h3 id="system---update"><strong>–system --update</strong></h3>
+<p>Update system packages.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Update system</span>
+mynas --system --update
+
+<span class="token comment"># Update with auto-remove</span>
+mynas --system --update --autoremove
+
+<span class="token comment"># Update specific packages</span>
+mynas --system --update --packages <span class="token string">"samba nfs-utils"</span>
+
+<span class="token comment"># Dry run (simulate)</span>
+mynas --system --update --dry-run
+</code></pre>
+<hr>
+<h2 id="🌐-network-management">🌐 <strong>NETWORK MANAGEMENT</strong></h2>
+<h3 id="network---list-interfaces"><strong>–network --list-interfaces</strong></h3>
+<p>List network interfaces.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># List all interfaces</span>
+mynas --network --list-interfaces
+
+<span class="token comment"># List with IP addresses</span>
+mynas --network --list-interfaces --ip
+
+<span class="token comment"># List with statistics</span>
+mynas --network --list-interfaces --stats
+</code></pre>
+<h3 id="network---set-ip-interface-ip-netmask"><strong>–network --set-ip &lt;interface&gt; &lt;ip&gt; [netmask]</strong></h3>
+<p>Set IP address.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set IP with default netmask (24)</span>
+mynas --network --set-ip eth0 192.168.1.100
+
+<span class="token comment"># Set IP with specific netmask</span>
+mynas --network --set-ip eth0 192.168.1.100 24
+mynas --network --set-ip eth0 10.0.0.5 16
+
+<span class="token comment"># Set multiple interfaces</span>
+mynas --network --set-ip eth0 192.168.1.100
+mynas --network --set-ip eth1 10.0.0.100
+</code></pre>
+<h3 id="network---set-gateway-gateway"><strong>–network --set-gateway &lt;gateway&gt;</strong></h3>
+<p>Set default gateway.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set gateway</span>
+mynas --network --set-gateway 192.168.1.1
+
+<span class="token comment"># Set gateway for specific interface</span>
+mynas --network --set-gateway 192.168.1.1 --interface eth0
+</code></pre>
+<h3 id="network---set-dns-dns_server"><strong>–network --set-dns &lt;dns_server&gt;</strong></h3>
+<p>Set DNS server.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set primary DNS</span>
+mynas --network --set-dns 8.8.8.8
+
+<span class="token comment"># Set multiple DNS servers</span>
+mynas --network --set-dns <span class="token string">"8.8.8.8 8.8.4.4 1.1.1.1"</span>
+
+<span class="token comment"># Set DNS for specific interface</span>
+mynas --network --set-dns 192.168.1.1 --interface eth0
+</code></pre>
+<h3 id="network---test"><strong>–network --test</strong></h3>
+<p>Test network connectivity.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Test connectivity</span>
+mynas --network --test
+
+<span class="token comment"># Test specific host</span>
+mynas --network --test --host 8.8.8.8
+
+<span class="token comment"># Test multiple hosts</span>
+<span class="token keyword">for</span> host <span class="token keyword">in</span> 8.8.8.8 1.1.1.1 google.com<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --network --test --host <span class="token variable">$host</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="network---bridge-name-interfaces"><strong>–network --bridge &lt;name&gt; &lt;interfaces&gt;</strong></h3>
+<p>Create network bridge.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create bridge</span>
+mynas --network --bridge br0 eth0 eth1
+
+<span class="token comment"># Create bridge with IP</span>
+mynas --network --bridge br0 eth0 eth1 --ip 192.168.1.100/24
+
+<span class="token comment"># Create multiple bridges</span>
+mynas --network --bridge br-mgmt eth0
+mynas --network --bridge br-data eth1 eth2
+</code></pre>
+<h3 id="network---bond-name-mode-interfaces"><strong>–network --bond &lt;name&gt; &lt;mode&gt; &lt;interfaces&gt;</strong></h3>
+<p>Create network bond.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Create bond</span>
+mynas --network --bond bond0 4 eth0 eth1
+
+<span class="token comment"># Create bond with LACP</span>
+mynas --network --bond bond0 802.3ad eth0 eth1
+
+<span class="token comment"># Create bond with specific IP</span>
+mynas --network --bond bond0 1 eth0 eth1 --ip 192.168.1.100/24
+</code></pre>
+<hr>
+<h2 id="⚡-service-management">⚡ <strong>SERVICE MANAGEMENT</strong></h2>
+<h3 id="service---start-service"><strong>–service --start &lt;service&gt;</strong></h3>
+<p>Start service.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Start Samba</span>
+mynas --service --start smbd
+mynas --service --start nmbd
+
+<span class="token comment"># Start NFS</span>
+mynas --service --start nfs-server
+
+<span class="token comment"># Start multiple services</span>
+<span class="token keyword">for</span> <span class="token function">service</span> <span class="token keyword">in</span> smbd nmbd nfs-server sshd<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --service --start <span class="token variable">$service</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="service---stop-service"><strong>–service --stop &lt;service&gt;</strong></h3>
+<p>Stop service.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Stop service</span>
+mynas --service --stop smbd
+
+<span class="token comment"># Stop for maintenance</span>
+mynas --service --stop smbd nmbd nfs-server
+</code></pre>
+<h3 id="service---restart-service"><strong>–service --restart &lt;service&gt;</strong></h3>
+<p>Restart service.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Restart service</span>
+mynas --service --restart smbd
+
+<span class="token comment"># Restart after configuration changes</span>
+mynas --service --restart smbd nmbd
+
+<span class="token comment"># Restart all NAS services</span>
+mynas --service --restart smbd nmbd nfs-server sshd fail2ban
+</code></pre>
+<h3 id="service---enable-service"><strong>–service --enable &lt;service&gt;</strong></h3>
+<p>Enable service at boot.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Enable service</span>
+mynas --service --enable smbd
+
+<span class="token comment"># Enable multiple services</span>
+<span class="token keyword">for</span> <span class="token function">service</span> <span class="token keyword">in</span> smbd nmbd nfs-server<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --service --enable <span class="token variable">$service</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="service---disable-service"><strong>–service --disable &lt;service&gt;</strong></h3>
+<p>Disable service at boot.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Disable service</span>
+mynas --service --disable smbd
+
+<span class="token comment"># Disable temporary</span>
+mynas --service --disable smbd --temp
+</code></pre>
+<h3 id="service---status-service"><strong>–service --status &lt;service&gt;</strong></h3>
+<p>Check service status.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check status</span>
+mynas --service --status smbd
+
+<span class="token comment"># Check multiple services</span>
+<span class="token keyword">for</span> <span class="token function">service</span> <span class="token keyword">in</span> smbd nmbd nfs-server<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== <span class="token variable">$service</span> ==="</span>
+    mynas --service --status <span class="token variable">$service</span>
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Monitor service</span>
+<span class="token function">watch</span> -n 2 <span class="token string">"mynas --service --status smbd"</span>
+</code></pre>
+<h3 id="service---mask-service"><strong>–service --mask &lt;service&gt;</strong></h3>
+<p>Mask service (prevent all starts).</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Mask service</span>
+mynas --service --mask smbd
+</code></pre>
+<h3 id="service---unmask-service"><strong>–service --unmask &lt;service&gt;</strong></h3>
+<p>Unmask service.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Unmask service</span>
+mynas --service --unmask smbd
+</code></pre>
+<hr>
+<h2 id="🔒-permission-management">🔒 <strong>PERMISSION MANAGEMENT</strong></h2>
+<h3 id="permission---set-path-owner-group-permissions"><strong>–permission --set &lt;path&gt; [owner] [group] [permissions]</strong></h3>
+<p>Set permissions.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Set ownership only</span>
+mynas --permission --set /mnt/nas/data root nasusers
+
+<span class="token comment"># Set full permissions</span>
+mynas --permission --set /mnt/nas/data root nasusers 2770
+
+<span class="token comment"># Set recursive</span>
+mynas --permission --set /mnt/nas/projects john developers 2775 --recursive
+
+<span class="token comment"># Set multiple directories</span>
+<span class="token keyword">for</span> <span class="token function">dir</span> <span class="token keyword">in</span> data shared backup<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --permission --set /mnt/nas/<span class="token variable">$dir</span> root nasusers 2770
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="permission---fix-path"><strong>–permission --fix &lt;path&gt;</strong></h3>
+<p>Fix permissions recursively.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Fix permissions</span>
+mynas --permission --fix /mnt/nas
+
+<span class="token comment"># Fix specific directory</span>
+mynas --permission --fix /mnt/nas/data
+
+<span class="token comment"># Fix with specific mode</span>
+mynas --permission --fix /mnt/nas --mode 2770
+</code></pre>
+<h3 id="permission---check-path-user"><strong>–permission --check &lt;path&gt; [user]</strong></h3>
+<p>Check permissions.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check permissions</span>
+mynas --permission --check /mnt/nas/data
+
+<span class="token comment"># Check for specific user</span>
+mynas --permission --check /mnt/nas/data john
+
+<span class="token comment"># Check multiple paths</span>
+<span class="token keyword">for</span> path <span class="token keyword">in</span> /mnt/nas/data /mnt/nas/shared<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">echo</span> <span class="token string">"=== <span class="token variable">$path</span> ==="</span>
+    mynas --permission --check <span class="token variable">$path</span>
+    <span class="token keyword">echo</span> <span class="token string">""</span>
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="permission---inherit-path"><strong>–permission --inherit &lt;path&gt;</strong></h3>
+<p>Set up permission inheritance.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Enable inheritance</span>
+mynas --permission --inherit /mnt/nas/data
+
+<span class="token comment"># Inherit with specific ACL</span>
+mynas --permission --inherit /mnt/nas --acl <span class="token string">"default:group::rwx"</span>
+</code></pre>
+<h3 id="permission---reset-path"><strong>–permission --reset &lt;path&gt;</strong></h3>
+<p>Reset to default permissions.</p>
+<p><strong>Examples:</strong></p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Reset permissions</span>
+mynas --permission --reset /mnt/nas/temp
+
+<span class="token comment"># Reset recursive</span>
+mynas --permission --reset /mnt/nas/temp --recursive
+</code></pre>
+<hr>
+<h2 id="🎯-practical-scenarios">🎯 <strong>PRACTICAL SCENARIOS</strong></h2>
+<h3 id="scenario-1-new-project-setup"><strong>Scenario 1: New Project Setup</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># 1. Create project directory</span>
+<span class="token function">mkdir</span> -p /mnt/nas/projects/alpha
+
+<span class="token comment"># 2. Create project group</span>
+mynas --group --create project_alpha
+
+<span class="token comment"># 3. Add team members</span>
+mynas --group --adduser project_alpha john
+mynas --group --adduser project_alpha mary
+mynas --group --adduser project_alpha bob
+
+<span class="token comment"># 4. Set permissions</span>
+mynas --permission --set /mnt/nas/projects/alpha root project_alpha 2770
+
+<span class="token comment"># 5. Create access policy</span>
+mynas --policy --create alpha_access project_alpha /mnt/nas/projects/alpha rwx <span class="token function">yes</span>
+
+<span class="token comment"># 6. Create Samba share</span>
+mynas --samba --add-share Alpha /mnt/nas/projects/alpha project_alpha <span class="token function">yes</span>
+
+<span class="token comment"># 7. Create NFS share</span>
+mynas --nfs --add-share /mnt/nas/projects/alpha 192.168.1.0/24
+</code></pre>
+<h3 id="scenario-2-department-nas-setup"><strong>Scenario 2: Department NAS Setup</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># 1. Create department structure</span>
+<span class="token function">mkdir</span> -p /mnt/nas/departments/<span class="token punctuation">{</span>it,hr,finance<span class="token punctuation">}</span>/<span class="token punctuation">{</span>data,shared,backup<span class="token punctuation">}</span>
+
+<span class="token comment"># 2. Create department groups</span>
+<span class="token keyword">for</span> dept <span class="token keyword">in</span> it hr finance<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --group --create dept_<span class="token variable">$dept</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># 3. Add users to departments</span>
+mynas --group --adduser dept_it john
+mynas --group --adduser dept_hr mary
+mynas --group --adduser dept_finance bob
+
+<span class="token comment"># 4. Set department policies</span>
+<span class="token keyword">for</span> dept <span class="token keyword">in</span> it hr finance<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --policy --create <span class="token variable">${dept}</span>_data dept_<span class="token variable">$dept</span> /mnt/nas/departments/<span class="token variable">$dept</span>/data rw <span class="token function">yes</span>
+    mynas --policy --create <span class="token variable">${dept}</span>_shared dept_<span class="token variable">$dept</span> /mnt/nas/departments/<span class="token variable">$dept</span>/shared r <span class="token function">yes</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># 5. Create shares</span>
+<span class="token keyword">for</span> dept <span class="token keyword">in</span> it hr finance<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --share --create <span class="token variable">${dept}</span>_data /mnt/nas/departments/<span class="token variable">$dept</span>/data dept_<span class="token variable">$dept</span> dept_<span class="token variable">$dept</span> rw
+    mynas --share --create <span class="token variable">${dept}</span>_shared /mnt/nas/departments/<span class="token variable">$dept</span>/shared dept_<span class="token variable">$dept</span> <span class="token string">"dept_<span class="token variable">$dept</span>,managers"</span> r
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="scenario-3-backup-storage-setup"><strong>Scenario 3: Backup Storage Setup</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># 1. Create RAID for backup</span>
+mynas --raid --create 1 /dev/sdb /dev/sdc backup_raid
+
+<span class="token comment"># 2. Create LVM</span>
+mynas --lvm --create-pv /dev/md0
+mynas --lvm --create-vg vg_backup /dev/md0
+mynas --lvm --create-lv vg_backup lv_backup 100%FREE
+
+<span class="token comment"># 3. Format and mount</span>
+mynas --storage --format /dev/vg_backup/lv_backup ext4
+mynas --storage --mount /dev/vg_backup/lv_backup /mnt/backup
+
+<span class="token comment"># 4. Set permissions</span>
+mynas --permission --set /mnt/backup root backup 2770
+
+<span class="token comment"># 5. Create backup group and policy</span>
+mynas --group --create backup
+mynas --policy --create backup_access backup /mnt/backup rw <span class="token function">yes</span>
+
+<span class="token comment"># 6. Schedule backups</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 2 * * * /usr/local/bin/mynas --backup --tar /mnt/nas /mnt/backup/nas_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.tar.gz"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<h3 id="scenario-4-security-hardening"><strong>Scenario 4: Security Hardening</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># 1. Set up firewall</span>
+mynas --firewall --add-service <span class="token function">ssh</span>
+mynas --firewall --add-service samba
+mynas --firewall --add-service nfs
+mynas --firewall --add-source 192.168.1.0/24
+
+<span class="token comment"># 2. Configure fail2ban</span>
+mynas --fail2ban --install
+mynas --fail2ban --enable-jail sshd
+mynas --fail2ban --enable-jail samba
+
+<span class="token comment"># 3. Set up AV scanning</span>
+mynas --av --update-databases
+mynas --av --clamav-schedule /mnt/nas
+mynas --av --maldet-monitor /mnt/nas
+
+<span class="token comment"># 4. Audit configuration</span>
+mynas --permission --check /mnt/nas --all
+
+<span class="token comment"># 5. Regular security checks</span>
+<span class="token punctuation">(</span>crontab -l 2<span class="token operator">&gt;</span>/dev/null<span class="token punctuation">;</span> <span class="token keyword">echo</span> <span class="token string">"0 4 * * * /usr/local/bin/mynas --av --clamav /mnt/nas"</span><span class="token punctuation">)</span> <span class="token operator">|</span> <span class="token function">crontab</span> -
+</code></pre>
+<hr>
+<h2 id="🚨-troubleshooting-commands">🚨 <strong>TROUBLESHOOTING COMMANDS</strong></h2>
+<h3 id="diagnostic-checks"><strong>Diagnostic Checks</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check all services</span>
+mynas --service --status smbd nmbd nfs-server fail2ban firewalld
+
+<span class="token comment"># Check storage</span>
+mynas --storage --list
+mynas --raid --status
+mynas --lvm --list-vg
+
+<span class="token comment"># Check permissions</span>
+mynas --permission --check /mnt/nas --verbose
+
+<span class="token comment"># Test user access</span>
+mynas --policy --test john /mnt/nas/data
+
+<span class="token comment"># Network diagnostics</span>
+mynas --network --test
+mynas --firewall --list
+</code></pre>
+<h3 id="quick-fixes"><strong>Quick Fixes</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Restart all services</span>
+mynas --service --restart smbd nmbd nfs-server
+
+<span class="token comment"># Reapply permissions</span>
+mynas --permission --fix /mnt/nas
+mynas --policy --applyall
+
+<span class="token comment"># Update configurations</span>
+mynas --system --update
+mynas --av --update-databases
+
+<span class="token comment"># Check disk health</span>
+mynas --monitor --disk-health
+</code></pre>
+<hr>
+<h2 id="📝-quick-reference-card">📝 <strong>QUICK REFERENCE CARD</strong></h2>
+<h3 id="most-common-commands"><strong>Most Common Commands</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># User Management</span>
+mynas --user --add <span class="token operator">&lt;</span>name<span class="token operator">&gt;</span>          <span class="token comment"># Add user</span>
+mynas --user --list                <span class="token comment"># List users</span>
+mynas --user --passwd <span class="token operator">&lt;</span>name<span class="token operator">&gt;</span>       <span class="token comment"># Change password</span>
+
+<span class="token comment"># Group Management</span>
+mynas --group --create <span class="token operator">&lt;</span>name<span class="token operator">&gt;</span>      <span class="token comment"># Create group</span>
+mynas --group --adduser <span class="token operator">&lt;</span>group<span class="token operator">&gt;</span> <span class="token operator">&lt;</span>user<span class="token operator">&gt;</span>  <span class="token comment"># Add user to group</span>
+
+<span class="token comment"># Storage</span>
+mynas --storage --list             <span class="token comment"># List storage</span>
+mynas --storage --format <span class="token operator">&lt;</span>dev<span class="token operator">&gt;</span>     <span class="token comment"># Format device</span>
+mynas --storage --mount <span class="token operator">&lt;</span>dev<span class="token operator">&gt;</span> <span class="token operator">&lt;</span>mp<span class="token operator">&gt;</span> <span class="token comment"># Mount device</span>
+
+<span class="token comment"># Shares</span>
+mynas --samba --add-share <span class="token operator">&lt;</span>name<span class="token operator">&gt;</span> <span class="token operator">&lt;</span>path<span class="token operator">&gt;</span> <span class="token operator">&lt;</span>users<span class="token operator">&gt;</span>  <span class="token comment"># Add Samba share</span>
+mynas --nfs --add-share <span class="token operator">&lt;</span>path<span class="token operator">&gt;</span> <span class="token operator">&lt;</span>network<span class="token operator">&gt;</span>         <span class="token comment"># Add NFS share</span>
+
+<span class="token comment"># Security</span>
+mynas --firewall --add-service samba  <span class="token comment"># Open Samba ports</span>
+mynas --fail2ban --install           <span class="token comment"># Install fail2ban</span>
+
+<span class="token comment"># Monitoring</span>
+mynas --monitor --iostat            <span class="token comment"># Check I/O stats</span>
+mynas --monitor --disk-health       <span class="token comment"># Check disk health</span>
+</code></pre>
+<h3 id="useful-aliases"><strong>Useful Aliases</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add to ~/.bashrc</span>
+<span class="token function">alias</span> nas-users<span class="token operator">=</span><span class="token string">'mynas --user --list'</span>
+<span class="token function">alias</span> nas-storage<span class="token operator">=</span><span class="token string">'mynas --storage --list'</span>
+<span class="token function">alias</span> nas-status<span class="token operator">=</span><span class="token string">'mynas --service --status smbd nmbd nfs-server'</span>
+<span class="token function">alias</span> nas-perms<span class="token operator">=</span><span class="token string">'mynas --permission --check /mnt/nas'</span>
+<span class="token function">alias</span> nas-health<span class="token operator">=</span><span class="token string">'mynas --monitor --disk-health'</span>
+<span class="token function">alias</span> nas-backup-now<span class="token operator">=</span><span class="token string">'mynas --backup --tar /mnt/nas /mnt/backup/nas_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d_%H%M%S<span class="token variable">)</span></span>.tar.gz'</span>
+</code></pre>
+<hr>
+<h2 id="🔧-advanced-usage-tips">🔧 <strong>ADVANCED USAGE TIPS</strong></h2>
+<h3 id="batch-operations"><strong>1. Batch Operations</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Add multiple users from file</span>
+<span class="token keyword">while</span> <span class="token function">read</span> user<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --user --add <span class="token variable">$user</span>
+<span class="token keyword">done</span> <span class="token operator">&lt;</span> users.txt
+
+<span class="token comment"># Create multiple groups</span>
+<span class="token keyword">for</span> group <span class="token keyword">in</span> web db app cache<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --group --create <span class="token variable">$group</span>
+<span class="token keyword">done</span>
+
+<span class="token comment"># Set permissions for multiple directories</span>
+<span class="token function">find</span> /mnt/nas -type d -name <span class="token string">"project_*"</span> <span class="token operator">|</span> <span class="token keyword">while</span> <span class="token function">read</span> <span class="token function">dir</span><span class="token punctuation">;</span> <span class="token keyword">do</span>
+    mynas --permission --set <span class="token variable">$dir</span> root developers 2770
+<span class="token keyword">done</span>
+</code></pre>
+<h3 id="automation-scripts"><strong>2. Automation Scripts</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token shebang important">#!/bin/bash</span>
+<span class="token comment"># nas-daily-maintenance.sh</span>
+
+<span class="token keyword">echo</span> <span class="token string">"=== Daily NAS Maintenance ==="</span>
+<span class="token keyword">echo</span> <span class="token string">"Time: <span class="token variable"><span class="token variable">$(</span><span class="token function">date</span><span class="token variable">)</span></span>"</span>
+
+<span class="token comment"># Update system</span>
+mynas --system --update
+
+<span class="token comment"># Update AV databases</span>
+mynas --av --update-databases
+
+<span class="token comment"># Quick virus scan</span>
+mynas --av --clamav /mnt/nas --quick
+
+<span class="token comment"># Check disk health</span>
+mynas --monitor --disk-health
+
+<span class="token comment"># Backup configurations</span>
+mynas --backup --tar /etc/mynas /mnt/backup/configs_<span class="token variable"><span class="token variable">$(</span><span class="token function">date</span> +%Y%m%d<span class="token variable">)</span></span>.tar.gz
+
+<span class="token keyword">echo</span> <span class="token string">"=== Maintenance Complete ==="</span>
+</code></pre>
+<h3 id="monitoring-script"><strong>3. Monitoring Script</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token shebang important">#!/bin/bash</span>
+<span class="token comment"># nas-monitor-alerts.sh</span>
+
+<span class="token comment"># Check disk space</span>
+usage<span class="token operator">=</span><span class="token punctuation">$(</span>df -h /mnt/nas <span class="token operator">|</span> <span class="token function">awk</span> <span class="token string">'NR==2 {print <span class="token variable">$5</span>}'</span> <span class="token operator">|</span> <span class="token function">sed</span> <span class="token string">'s/%//'</span><span class="token punctuation">)</span>
+<span class="token keyword">if</span> <span class="token punctuation">[</span> <span class="token variable">$usage</span> -gt 90 <span class="token punctuation">]</span><span class="token punctuation">;</span> <span class="token keyword">then</span>
+    <span class="token keyword">echo</span> <span class="token string">"ALERT: NAS storage at <span class="token variable">${usage}</span>%"</span> <span class="token operator">|</span> mail -s <span class="token string">"NAS Storage Alert"</span> admin@example.com
+<span class="token keyword">fi</span>
+
+<span class="token comment"># Check RAID status</span>
+<span class="token keyword">if</span> <span class="token operator">!</span> mynas --raid --status <span class="token operator">|</span> <span class="token function">grep</span> -q <span class="token string">"U_U"</span><span class="token punctuation">;</span> <span class="token keyword">then</span>
+    <span class="token keyword">echo</span> <span class="token string">"ALERT: RAID degraded"</span> <span class="token operator">|</span> mail -s <span class="token string">"NAS RAID Alert"</span> admin@example.com
+<span class="token keyword">fi</span>
+
+<span class="token comment"># Check services</span>
+<span class="token keyword">for</span> <span class="token function">service</span> <span class="token keyword">in</span> smbd nmbd nfs-server<span class="token punctuation">;</span> <span class="token keyword">do</span>
+    <span class="token keyword">if</span> <span class="token operator">!</span> systemctl is-active --quiet <span class="token variable">$service</span><span class="token punctuation">;</span> <span class="token keyword">then</span>
+        <span class="token keyword">echo</span> <span class="token string">"ALERT: <span class="token variable">$service</span> not running"</span> <span class="token operator">|</span> mail -s <span class="token string">"NAS Service Alert"</span> admin@example.com
+    <span class="token keyword">fi</span>
+<span class="token keyword">done</span>
+</code></pre>
+<hr>
+<h2 id="📚-learning-path">📚 <strong>LEARNING PATH</strong></h2>
+<h3 id="beginner-level"><strong>Beginner Level</strong></h3>
+<ol>
+<li><code>mynas --help</code> - Understand basic usage</li>
+<li><code>mynas --user --*</code> - Master user management</li>
+<li><code>mynas --storage --list</code> - Learn storage layout</li>
+<li><code>mynas --service --status</code> - Check service status</li>
+</ol>
+<h3 id="intermediate-level"><strong>Intermediate Level</strong></h3>
+<ol>
+<li><code>mynas --group --*</code> - Implement group policies</li>
+<li><code>mynas --share --*</code> - Configure shares</li>
+<li><code>mynas --permission --*</code> - Manage permissions</li>
+<li><code>mynas --policy --*</code> - Create access policies</li>
+</ol>
+<h3 id="advanced-level"><strong>Advanced Level</strong></h3>
+<ol>
+<li><code>mynas --raid --*</code> - Configure RAID arrays</li>
+<li><code>mynas --lvm --*</code> - Implement LVM storage</li>
+<li><code>mynas --firewall --*</code> - Secure network access</li>
+<li><code>mynas --av --*</code> - Implement security scanning</li>
+</ol>
+<h3 id="expert-level"><strong>Expert Level</strong></h3>
+<ol>
+<li>Automation scripts</li>
+<li>Performance tuning</li>
+<li>Disaster recovery</li>
+<li>Enterprise integration</li>
+</ol>
+<hr>
+<h2 id="🆘-getting-help">🆘 <strong>GETTING HELP</strong></h2>
+<h3 id="help-commands"><strong>Help Commands</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># General help</span>
+mynas --help
+
+<span class="token comment"># Module help</span>
+mynas --help --user
+mynas --help --storage
+mynas --help --raid
+
+<span class="token comment"># Verbose help</span>
+mynas --help --verbose
+
+<span class="token comment"># List all modules</span>
+mynas --help --modules
+</code></pre>
+<h3 id="debug-mode"><strong>Debug Mode</strong></h3>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Enable debug output</span>
+mynas --verbose --user --add testuser
+
+<span class="token comment"># Check logs</span>
+<span class="token function">tail</span> -f /var/log/mynas/mynas_*.log
+
+<span class="token comment"># Test without changes</span>
+mynas --user --add testuser --dry-run
+</code></pre>
+<h3 id="common-issues--solutions"><strong>Common Issues &amp; Solutions</strong></h3>
+<p><strong>Issue:</strong> “Permission denied”</p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Run as root</span>
+<span class="token function">sudo</span> mynas --user --add testuser
+
+<span class="token comment"># Check sudo access</span>
+<span class="token function">sudo</span> -l
+</code></pre>
+<p><strong>Issue:</strong> “Command not found”</p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check installation</span>
+<span class="token function">ls</span> -la /usr/local/bin/mynas
+
+<span class="token comment"># Reinstall</span>
+<span class="token function">cp</span> mynas.sh /usr/local/bin/mynas
+<span class="token function">chmod</span> +x /usr/local/bin/mynas
+</code></pre>
+<p><strong>Issue:</strong> “Service not starting”</p>
+<pre class=" language-bash"><code class="prism  language-bash"><span class="token comment"># Check service status</span>
+mynas --service --status smbd --verbose
+
+<span class="token comment"># Check logs</span>
+journalctl -u smbd --no-pager
+
+<span class="token comment"># Restart service</span>
+mynas --service --restart smbd
+</code></pre>
+<hr>
+<p>This manual covers all commands and switches available in mynas v1.0.1+. For the most up-to-date information, always check <code>mynas --help</code> and the official repository documentation.</p>
+</div>
+</body>
+
+</html>
