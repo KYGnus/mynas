@@ -2,11 +2,20 @@
 set -euo pipefail
 
 # ==============================
-# Linux NAS bootstrap (Debian/Ubuntu)
-# Installs & configures: Samba, NFS, SSHFS, rsync, glances, sysstat (iostat), iotop, dstat,
-# ncdu, iftop, nload, bmon, fail2ban, firewalld, clamav, maldet, and useful extras.
-# Creates users, shares, exports.
+# Enhanced NAS Configuration Script
+# Converts Linux into NAS storage with group-based access control
+# Features: Samba, NFS, SSHFS, RAID, LVM, Monitoring, Security
 # ==============================
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
 
 # Defaults
 USERS_CSV=""
@@ -15,172 +24,393 @@ NFS_SHARE="/srv/nfs/data"
 NFS_CIDR="192.168.0.0/24"
 SMB_WORKGROUP="WORKGROUP"
 SMB_GROUP="nasusers"
-DEFAULT_SMB_PASSWORD="ChangeMe123!"   # CHANGE THIS ASAP
+POLICY_GROUP="nasaccess"
+DEFAULT_SMB_PASSWORD="ChangeMe123!"
+MYNAS_CONFIG_DIR="/etc/mynas"
+MYNAS_LOG_DIR="/var/log/mynas"
+NAS_MOUNT="/mnt/nas"
+BACKUP_DIR="/mnt/backup"
+REPORT_FILE="/tmp/nas_setup_report_$(date +%Y%m%d_%H%M%S).log"
 
-# ---- arg parsing ----
+# Installation status tracking
+declare -A STEP_STATUS
+declare -A STEP_MESSAGE
+FAILED_STEPS=()
 
-usage() {
-  cat <<EOF
-Linux NAS Setup Script
-=======================
+# ---- Initialization ----
+init_report() {
+    echo "===========================================" > "$REPORT_FILE"
+    echo "NAS Setup Report - $(date)" >> "$REPORT_FILE"
+    echo "===========================================" >> "$REPORT_FILE"
+    echo "" >> "$REPORT_FILE"
+}
 
-This script installs and configures:
-  - Samba (SMB/CIFS)
-  - NFS kernel server
-  - SSHFS
-  - rsync
-  - Monitoring tools (glances, sysstat, iostat, iotop, dstat, ncdu, iftop, nload, bmon)
-  - Security tools (fail2ban, firewalld, clamav, maldet)
+log() { 
+    echo -e "${GREEN}[✓]${NC} $*"
+    echo "[✓] $*" >> "$REPORT_FILE"
+    STEP_MESSAGE["${FUNCNAME[1]}"]="$*"
+}
 
-Usage:
-  sudo ./setup_nas.sh [OPTIONS]
+warn() { 
+    echo -e "${YELLOW}[!]${NC} $*"
+    echo "[!] $*" >> "$REPORT_FILE"
+}
 
-Options:
-  --users       Comma-separated usernames to create and enable for Samba
-  --smb-share   Path for Samba share (default: /srv/samba/data)
-  --nfs-share   Path for NFS export (default: /srv/nfs/data)
-  --nfs-cidr    Allowed network in CIDR format (default: 192.168.0.0/24)
-  -h, --help    Show this help message and exit
+error() { 
+    echo -e "${RED}[✗]${NC} $*"
+    echo "[✗] $*" >> "$REPORT_FILE"
+    STEP_STATUS["${FUNCNAME[1]}"]="FAILED"
+    FAILED_STEPS+=("${FUNCNAME[1]}")
+    return 1
+}
 
-Examples:
-  sudo ./setup_nas.sh --users koosha,alice --smb-share /srv/samba/data \\
-       --nfs-share /srv/nfs/data --nfs-cidr 192.168.1.0/24
+info() {
+    echo -e "${BLUE}[i]${NC} $*"
+    echo "[i] $*" >> "$REPORT_FILE"
+}
 
-Notes:
-  * Samba users get default password "ChangeMe123!" (change immediately).
-  * NFS is exported to the given subnet with rw,sync,no_subtree_check,no_root_squash.
-  * Firewalld allows SSH, Samba, and NFS for the specified NFS_CIDR.
-  * Fail2ban protects SSH and Samba with default settings.
-  * ClamAV and Maldet are set up for periodic scans.
+step_begin() {
+    local step_name="$1"
+    echo -e "\n${CYAN}=== $step_name ===${NC}"
+    echo "" >> "$REPORT_FILE"
+    echo "=== $step_name ===" >> "$REPORT_FILE"
+}
+
+step_end() {
+    local step_name="${FUNCNAME[1]}"
+    if [[ -z "${STEP_STATUS[$step_name]:-}" ]]; then
+        STEP_STATUS["$step_name"]="PASSED"
+    fi
+}
+
+check_previous_step() {
+    local current_step="${FUNCNAME[1]}"
+    local previous_step="${FUNCNAME[2]}"
+    
+    if [[ -n "$previous_step" ]] && [[ "${STEP_STATUS[$previous_step]:-}" == "FAILED" ]]; then
+        error "Cannot proceed with $current_step because previous step $previous_step failed"
+        return 1
+    fi
+    return 0
+}
+
+# ---- Pre-flight checks ----
+preflight_check() {
+    step_begin "Pre-flight System Checks"
+    
+    # Check if running as root
+    if [[ $EUID -ne 0 ]]; then
+        error "Please run as root (use sudo)."
+        return 1
+    fi
+
+    # Check distribution
+    if ! command -v apt >/dev/null 2>&1; then
+        warn "This script is optimized for Debian/Ubuntu (apt-based)."
+        warn "Other distributions may require manual adjustments."
+    fi
+
+    # Check internet connectivity
+    if ! ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1; then
+        warn "No internet connectivity detected. Some packages may fail to install."
+    fi
+
+    # Check disk space
+    local free_space=$(df -h / | tail -1 | awk '{print $4}')
+    info "Available disk space on /: $free_space"
+    
+    if [[ $(df / --output=avail | tail -1) -lt 1048576 ]]; then
+        warn "Low disk space on root partition (<1GB)"
+    fi
+
+    # Check memory
+    local mem_total=$(free -m | awk '/Mem:/ {print $2}')
+    info "Total RAM: ${mem_total}MB"
+    
+    if [[ $mem_total -lt 1024 ]]; then
+        warn "Low memory (<1GB). Some services may be affected."
+    fi
+
+    log "Pre-flight checks completed"
+    step_end
+}
+
+# ---- Package Management ----
+install_packages() {
+    step_begin "Installing Required Packages"
+    check_previous_step || return 1
+    
+    export DEBIAN_FRONTEND=noninteractive
+    
+    # Update package lists
+    if ! apt-get update -y; then
+        error "Failed to update package lists"
+        return 1
+    fi
+    log "Package lists updated"
+
+    # Install core packages
+    local core_packages=(
+        samba samba-common-bin
+        nfs-kernel-server
+        sshfs fuse
+        rsync
+        mdadm
+        lvm2
+        smartmontools
+        hdparm
+        quota
+        auditd audispd-plugins
+    )
+
+    if ! apt-get install -y --no-install-recommends "${core_packages[@]}"; then
+        error "Failed to install core packages"
+        return 1
+    fi
+    log "Core packages installed"
+
+    # Install monitoring tools
+    local monitoring_packages=(
+        glances
+        sysstat
+        iotop
+        dstat
+        ncdu
+        iftop
+        nload
+        bmon
+        htop
+        netdata
+    )
+
+    if ! apt-get install -y --no-install-recommends "${monitoring_packages[@]}"; then
+        warn "Some monitoring tools failed to install (continuing)"
+    else
+        log "Monitoring tools installed"
+    fi
+
+    # Install security tools
+    local security_packages=(
+        fail2ban
+        firewalld
+        clamav clamav-daemon
+        rkhunter
+        chkrootkit
+        linux-malware-detect
+    )
+
+    if ! apt-get install -y --no-install-recommends "${security_packages[@]}"; then
+        warn "Some security tools failed to install (continuing)"
+    else
+        log "Security tools installed"
+    fi
+
+    step_end
+}
+
+# ---- Directory Structure ----
+create_directory_structure() {
+    step_begin "Creating Directory Structure"
+    check_previous_step || return 1
+
+    # Main NAS directories
+    local directories=(
+        "$NAS_MOUNT"
+        "$NAS_MOUNT/data"
+        "$NAS_MOUNT/backup"
+        "$NAS_MOUNT/shares"
+        "$NAS_MOUNT/groups"
+        "$BACKUP_DIR"
+        "$MYNAS_CONFIG_DIR"
+        "$MYNAS_LOG_DIR"
+        "$SMB_SHARE"
+        "$NFS_SHARE"
+    )
+
+    for dir in "${directories[@]}"; do
+        if ! mkdir -p "$dir" 2>/dev/null; then
+            error "Failed to create directory: $dir"
+            return 1
+        fi
+        log "Created directory: $dir"
+    done
+
+    # Set permissions
+    chmod 755 "$MYNAS_CONFIG_DIR" "$MYNAS_LOG_DIR"
+    chmod 2770 "$NAS_MOUNT" "$SMB_SHARE" "$NFS_SHARE"
+    
+    log "Directory structure created with proper permissions"
+    step_end
+}
+
+# ---- User and Group Management ----
+setup_users_groups() {
+    step_begin "Setting Up Users and Groups"
+    check_previous_step || return 1
+
+    # Create groups
+    local groups=("$SMB_GROUP" "$POLICY_GROUP" "nasadmin" "nasusers")
+    
+    for group in "${groups[@]}"; do
+        if ! getent group "$group" >/dev/null; then
+            if groupadd "$group"; then
+                log "Created group: $group"
+                
+                # Create group directory
+                mkdir -p "$NAS_MOUNT/groups/$group"
+                chmod 2770 "$NAS_MOUNT/groups/$group"
+                chown "root:$group" "$NAS_MOUNT/groups/$group"
+            else
+                warn "Failed to create group: $group"
+            fi
+        else
+            log "Group already exists: $group"
+        fi
+    done
+
+    # Create users from CSV
+    if [[ -n "$USERS_CSV" ]]; then
+        IFS=',' read -r -a USERS <<< "$USERS_CSV"
+        
+        for user in "${USERS[@]}"; do
+            user=$(echo "$user" | xargs)  # Trim whitespace
+            [[ -z "$user" ]] && continue
+            
+            if ! id -u "$user" >/dev/null 2>&1; then
+                if useradd -m -s /bin/bash -G "$SMB_GROUP,$POLICY_GROUP" "$user"; then
+                    log "Created user: $user"
+                    
+                    # Set default password
+                    echo "$user:$DEFAULT_SMB_PASSWORD" | chpasswd
+                    
+                    # Create user directories
+                    mkdir -p "/home/$user/private" "/home/$user/shared"
+                    chown -R "$user:$user" "/home/$user"
+                    chmod 750 "/home/$user"
+                    chmod 700 "/home/$user/private"
+                    chmod 755 "/home/$user/shared"
+                    
+                    # Add to Samba
+                    (echo "$DEFAULT_SMB_PASSWORD"; echo "$DEFAULT_SMB_PASSWORD") | \
+                        smbpasswd -s -a "$user" || true
+                    smbpasswd -e "$user" || true
+                    
+                else
+                    warn "Failed to create user: $user"
+                fi
+            else
+                log "User already exists: $user"
+                usermod -a -G "$SMB_GROUP,$POLICY_GROUP" "$user" || true
+            fi
+        done
+    else
+        warn "No users specified (use --users option)"
+    fi
+
+    step_end
+}
+
+# ---- mynas Configuration ----
+setup_mynas_config() {
+    step_begin "Configuring mynas Management Tool"
+    check_previous_step || return 1
+
+    # Create mynas script if not exists
+    local mynas_script="/usr/local/bin/mynas"
+    
+    if [[ ! -f "$mynas_script" ]]; then
+        cat > "$mynas_script" << 'EOF'
+#!/bin/bash
+# Placeholder for mynas script
+echo "mynas management tool"
+echo "Configure me in $MYNAS_CONFIG_DIR"
 EOF
-}
+        chmod +x "$mynas_script"
+        log "Created mynas script placeholder"
+    fi
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --users) USERS_CSV="${2:-}"; shift 2 ;;
-    --smb-share) SMB_SHARE="${2:-}"; shift 2 ;;
-    --nfs-share) NFS_SHARE="${2:-}"; shift 2 ;;
-    --nfs-cidr) NFS_CIDR="${2:-}"; shift 2 ;;
-    -h|--help) usage; exit 0 ;;
-    *) echo "Unknown arg: $1"; usage; exit 1 ;;
-  esac
+    # Create configuration files
+    cat > "$MYNAS_CONFIG_DIR/groups.conf" << EOF
+# Group Configuration
+# Format: groupname:user1,user2,user3
+
+$SMB_GROUP:$(IFS=','; echo "${USERS[*]}")
+$POLICY_GROUP:$(IFS=','; echo "${USERS[*]}")
+nasadmin:root
+nasusers:$(IFS=','; echo "${USERS[*]}")
+EOF
+
+    cat > "$MYNAS_CONFIG_DIR/policies.conf" << EOF
+# Access Policies Configuration
+# Format: policy_name:group:path:permissions:recursive
+# permissions: r=read, w=write, x=execute, l=list, n=none
+
+# Default policies
+data_access:$SMB_GROUP:$NAS_MOUNT/data:rw:yes
+backup_access:nasadmin:$BACKUP_DIR:rw:yes
+share_access:$POLICY_GROUP:$NAS_MOUNT/shares:rw:yes
+group_access:$SMB_GROUP:$NAS_MOUNT/groups:rw:yes
+EOF
+
+    cat > "$MYNAS_CONFIG_DIR/shares.conf" << EOF
+# Shares Configuration
+# Format: share_name:path:owner_group:access_groups:permissions
+
+data:$NAS_MOUNT/data:$SMB_GROUP:$SMB_GROUP,$POLICY_GROUP:rw
+backup:$BACKUP_DIR:nasadmin:nasadmin:rw
+shares:$NAS_MOUNT/shares:$POLICY_GROUP:$POLICY_GROUP,$SMB_GROUP:rw
+EOF
+
+    # Create sample script for applying policies
+    cat > "$MYNAS_CONFIG_DIR/apply_policies.sh" << 'EOF'
+#!/bin/bash
+# Apply all access policies
+for policy_file in /etc/mynas/policies.conf; do
+    while IFS=: read -r policy group path permissions recursive; do
+        [ -z "$policy" ] && continue
+        [ "$policy" = "#" ] && continue
+        
+        chown ":$group" "$path" 2>/dev/null || continue
+        
+        case "$permissions" in
+            r) chmod -R g+r,o-rwx "$path" ;;
+            rw) chmod -R g+rw,o-rwx "$path" ;;
+            rwx) chmod -R g+rwx,o-rwx "$path" ;;
+            none) chmod -R g-rwx,o-rwx "$path" ;;
+        esac
+        
+        if [ "$recursive" = "yes" ]; then
+            find "$path" -type d -exec chmod g+s {} \;
+        fi
+    done < "$policy_file"
 done
+EOF
 
-# ---- preflight ----
-if [[ $EUID -ne 0 ]]; then
-  echo "Please run as root (use sudo)." >&2
-  exit 1
-fi
-
-if ! command -v apt >/dev/null 2>&1; then
-  echo "This script targets Debian/Ubuntu (apt-based)." >&2
-  exit 1
-fi
-
-log() { echo -e "\033[1;32m[+] $*\033[0m"; }
-warn() { echo -e "\033[1;33m[!] $*\033[0m"; }
-err() { echo -e "\033[1;31m[-] $*\033[0m"; }
-
-backup_file() {
-  local f="$1"
-  if [[ -f "$f" ]] && [[ ! -f "${f}.bak" ]]; then
-    cp -a "$f" "${f}.bak"
-    log "Backed up $f to ${f}.bak"
-  fi
+    chmod +x "$MYNAS_CONFIG_DIR/apply_policies.sh"
+    
+    log "mynas configuration created in $MYNAS_CONFIG_DIR"
+    step_end
 }
 
-ensure_group() {
-  local g="$1"
-  if getent group "$g" >/dev/null; then
-    log "Group '$g' exists"
-  else
-    groupadd "$g"
-    log "Group '$g' created"
-  fi
-}
+# ---- Samba Configuration ----
+configure_samba() {
+    step_begin "Configuring Samba"
+    check_previous_step || return 1
 
-ensure_user() {
-  local u="$1"
-  local g="$2"
-  if id -u "$u" >/dev/null 2>&1; then
-    log "User '$u' exists"
-  else
-    useradd -m -s /bin/bash -G "$g" "$u"
-    log "User '$u' created and added to '$g'"
-  fi
-  usermod -a -G "$g" "$u"
-}
+    backup_file() {
+        local f="$1"
+        if [[ -f "$f" ]] && [[ ! -f "${f}.bak" ]]; then
+            cp -a "$f" "${f}.bak"
+            log "Backed up $f to ${f}.bak"
+        fi
+    }
+    
+    backup_file /etc/samba/smb.conf
 
-create_dir_owned() {
-  local path="$1"
-  local owner="$2"
-  local group="$3"
-  local mode="$4"
-  mkdir -p "$path"
-  chown "$owner":"$group" "$path"
-  chmod "$mode" "$path"
-  log "Ensured dir $path (owner=$owner, group=$group, mode=$mode)"
-}
-
-update_line_in_file() {
-  local file="$1" regex="$2" replacement="$3"
-  if grep -Eq "$regex" "$file"; then
-    sed -ri "s|$regex|$replacement|" "$file"
-  else
-    echo "$replacement" >> "$file"
-  fi
-}
-
-# ---- install packages ----
-log "Updating apt and installing packages..."
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y --no-install-recommends \
-  samba samba-common-bin \
-  nfs-kernel-server \
-  sshfs fuse \
-  rsync \
-  glances \
-  sysstat \
-  iotop \
-  dstat \
-  ncdu \
-  iftop \
-  nload \
-  bmon \
-  smartmontools \
-  hdparm \
-  mdadm \
-  lvm2 \
-  htop \
-  tmux \
-  fail2ban \
-  firewalld \
-  clamav clamav-daemon \
-  linux-malware-detect
-
-log "Packages installed."
-
-# ---- group & users ----
-ensure_group "$SMB_GROUP"
-
-IFS=',' read -r -a USERS <<< "${USERS_CSV}"
-if [[ -n "${USERS_CSV}" ]]; then
-  for u in "${USERS[@]}"; do
-    [[ -z "$u" ]] && continue
-    ensure_user "$u" "$SMB_GROUP"
-  done
-else
-  warn "No --users provided; skipping system user creation (you can re-run with --users)."
-fi
-
-# ---- Samba configuration ----
-log "Configuring Samba..."
-backup_file /etc/samba/smb.conf
-
-cat >/etc/samba/smb.conf <<EOF
+    # Main Samba configuration
+    cat > /etc/samba/smb.conf << EOF
 [global]
-   workgroup = ${SMB_WORKGROUP}
+   workgroup = $SMB_WORKGROUP
    server role = standalone server
    security = user
    map to guest = Bad User
@@ -196,87 +426,148 @@ cat >/etc/samba/smb.conf <<EOF
    follow symlinks = yes
    wide links = yes
    unix extensions = no
+   log file = /var/log/samba/log.%m
+   max log size = 1000
+   log level = 1
 
 [Data]
-   path = ${SMB_SHARE}
+   path = $NAS_MOUNT/data
    browseable = yes
    writable = yes
-   valid users = @${SMB_GROUP}
+   valid users = @$SMB_GROUP
    create mask = 0660
    directory mask = 0770
-   force group = ${SMB_GROUP}
+   force group = $SMB_GROUP
    inherit permissions = yes
-   comment = Shared data
+   comment = NAS Data Share
+
+[Backup]
+   path = $BACKUP_DIR
+   browseable = yes
+   writable = yes
+   valid users = @nasadmin
+   create mask = 0660
+   directory mask = 0770
+   force group = nasadmin
+   inherit permissions = yes
+   comment = NAS Backup Share
+
+[Shares]
+   path = $NAS_MOUNT/shares
+   browseable = yes
+   writable = yes
+   valid users = @$POLICY_GROUP
+   create mask = 0660
+   directory mask = 0770
+   force group = $POLICY_GROUP
+   inherit permissions = yes
+   comment = Shared Files
 EOF
 
-create_dir_owned "$SMB_SHARE" "root" "$SMB_GROUP" 2770
+    # Set permissions on shares
+    chown -R "root:$SMB_GROUP" "$NAS_MOUNT/data"
+    chmod -R 2770 "$NAS_MOUNT/data"
+    
+    chown -R "root:nasadmin" "$BACKUP_DIR"
+    chmod -R 2770 "$BACKUP_DIR"
+    
+    chown -R "root:$POLICY_GROUP" "$NAS_MOUNT/shares"
+    chmod -R 2770 "$NAS_MOUNT/shares"
 
-if [[ -n "${USERS_CSV}" ]]; then
-  for u in "${USERS[@]}"; do
-    if id -u "$u" >/dev/null 2>&1; then
-      (echo "${DEFAULT_SMB_PASSWORD}"; echo "${DEFAULT_SMB_PASSWORD}") | smbpasswd -s -a "$u" || true
-      smbpasswd -e "$u" || true
-      log "Samba account set for '$u' (default password: ${DEFAULT_SMB_PASSWORD})"
+    # Enable and start services
+    if systemctl enable smbd nmbd --now; then
+        log "Samba services enabled and started"
+    else
+        error "Failed to start Samba services"
+        return 1
     fi
-  done
-else
-  warn "No users to add to Samba; you can add later with: smbpasswd -a <user>"
-fi
 
-systemctl enable smbd nmbd --now
-log "Samba enabled and started."
+    step_end
+}
 
-# ---- NFS configuration ----
-log "Configuring NFS..."
-backup_file /etc/exports
+# ---- NFS Configuration ----
+configure_nfs() {
+    step_begin "Configuring NFS"
+    check_previous_step || return 1
 
-create_dir_owned "$NFS_SHARE" "root" "$SMB_GROUP" 2770
+    backup_file /etc/exports
 
-if grep -qE "^[[:space:]]*$(printf '%q' "$NFS_SHARE")[[:space:]]" /etc/exports; then
-  sed -ri "s|^(\s*)$(printf '%q' "$NFS_SHARE").*|\1${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)|" /etc/exports
-else
-  echo "${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)" >> /etc/exports
-fi
+    # Configure exports
+    cat > /etc/exports << EOF
+# NAS NFS Exports
+$NAS_MOUNT/data $NFS_CIDR(rw,sync,no_subtree_check,no_root_squash)
+$NAS_MOUNT/shares $NFS_CIDR(rw,sync,no_subtree_check,no_root_squash)
+$BACKUP_DIR $NFS_CIDR(ro,sync,no_subtree_check,no_root_squash)
+EOF
 
-exportfs -ra
-systemctl enable nfs-kernel-server --now
-log "NFS exports applied and service started."
+    # Apply exports
+    if exportfs -ra; then
+        log "NFS exports configured"
+    else
+        error "Failed to apply NFS exports"
+        return 1
+    fi
 
-# ---- sysstat (iostat, sar) ----
-log "Enabling sysstat data collection..."
-backup_file /etc/default/sysstat
-if [[ -f /etc/default/sysstat ]]; then
-  sed -ri 's/^\s*ENABLED\s*=.*/ENABLED="true"/' /etc/default/sysstat || true
-fi
-systemctl enable sysstat --now || true
+    # Enable and start NFS
+    if systemctl enable nfs-kernel-server --now; then
+        log "NFS server enabled and started"
+    else
+        error "Failed to start NFS server"
+        return 1
+    fi
 
-# ---- FUSE / sshfs tweak ----
-log "Enabling user_allow_other in /etc/fuse.conf for sshfs convenience..."
-backup_file /etc/fuse.conf
-touch /etc/fuse.conf
-if grep -q '^\s*#\s*user_allow_other' /etc/fuse.conf; then
-  sed -ri 's/^\s*#\s*user_allow_other/user_allow_other/' /etc/fuse.conf
-elif ! grep -q '^\s*user_allow_other' /etc/fuse.conf; then
-  echo "user_allow_other" >> /etc/fuse.conf
-fi
+    step_end
+}
 
-# ---- firewalld configuration ----
-log "Configuring firewalld..."
-systemctl enable firewalld --now
-firewall-cmd --permanent --add-service=ssh
-firewall-cmd --permanent --add-service=samba
-firewall-cmd --permanent --add-service=nfs
-firewall-cmd --permanent --zone=public --add-source="${NFS_CIDR}"
-firewall-cmd --reload
-log "Firewalld configured with SSH, Samba, NFS, and source ${NFS_CIDR}."
+# ---- Firewall Configuration ----
+configure_firewall() {
+    step_begin "Configuring Firewall"
+    check_previous_step || return 1
 
-# ---- fail2ban configuration ----
-log "Configuring fail2ban..."
-backup_file /etc/fail2ban/jail.local
-cat > /etc/fail2ban/jail.local <<EOF
+    # Enable and start firewalld
+    if systemctl enable firewalld --now; then
+        log "Firewalld enabled"
+    else
+        warn "Firewalld not available, using ufw or iptables"
+        return 0
+    fi
+
+    # Configure firewall rules
+    local fw_commands=(
+        "--permanent --add-service=ssh"
+        "--permanent --add-service=samba"
+        "--permanent --add-service=nfs"
+        "--permanent --add-service=nfs3"
+        "--permanent --add-service=mountd"
+        "--permanent --add-service=rpc-bind"
+        "--permanent --zone=public --add-source=$NFS_CIDR"
+    )
+
+    for cmd in "${fw_commands[@]}"; do
+        if ! firewall-cmd $cmd; then
+            warn "Failed to add firewall rule: $cmd"
+        fi
+    done
+
+    if firewall-cmd --reload; then
+        log "Firewall rules applied"
+    else
+        warn "Failed to reload firewall"
+    fi
+
+    step_end
+}
+
+# ---- Security Configuration ----
+configure_security() {
+    step_begin "Configuring Security Tools"
+    check_previous_step || return 1
+
+    # Fail2ban
+    cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
-bantime  = 10m
-findtime  = 10m
+bantime = 3600
+findtime = 600
 maxretry = 5
 destemail = root@localhost
 action = %(action_mwl)s
@@ -286,159 +577,507 @@ enabled = true
 port = ssh
 filter = sshd
 logpath = /var/log/auth.log
-maxretry = 5
 
 [samba]
 enabled = true
 port = 137,138,139,445
 filter = samba
-logpath = /var/log/samba/log.%(netbios_name)s
-maxretry = 5
+logpath = /var/log/samba/log.%m
+
+[sshd-ddos]
+enabled = true
+port = ssh
+filter = sshd-ddos
+logpath = /var/log/auth.log
+maxretry = 10
 EOF
 
-systemctl enable fail2ban --now
-log "Fail2ban configured for SSH and Samba protection."
+    if systemctl enable fail2ban --now; then
+        log "Fail2ban configured"
+    else
+        warn "Fail2ban configuration failed"
+    fi
 
-# ---- ClamAV configuration ----
-log "Configuring ClamAV..."
-systemctl stop clamav-freshclam
-freshclam
-systemctl enable clamav-freshclam --now
-systemctl enable clamav-daemon --now
-
-# Set up weekly ClamAV scan
-CRON_FILE="/etc/cron.weekly/clamav-nas-scan"
-backup_file "$CRON_FILE"
-cat > "$CRON_FILE" <<EOF
+    # ClamAV
+    if systemctl enable clamav-freshclam clamav-daemon --now; then
+        freshclam || true
+        log "ClamAV configured"
+        
+        # Create scan schedule
+        cat > /etc/cron.weekly/clamav-nas-scan << EOF
 #!/bin/sh
-clamscan -r ${SMB_SHARE} ${NFS_SHARE} --bell -i --exclude-dir="^/proc|^/sys|^/dev" -l /var/log/clamav/nas-scan.log
+clamscan -r $NAS_MOUNT --bell -i --exclude-dir="^/proc|^/sys|^/dev" -l /var/log/clamav/nas-scan.log
 EOF
-chmod +x "$CRON_FILE"
-log "ClamAV configured with weekly scan for ${SMB_SHARE} and ${NFS_SHARE}."
+        chmod +x /etc/cron.weekly/clamav-nas-scan
+    else
+        warn "ClamAV configuration failed"
+    fi
 
-# ---- Maldet configuration ----
-log "Configuring Maldet..."
-maldet --update-ver
-maldet --update
-mkdir -p /var/log/maldet
-cat > /etc/maldetect/conf.maldet <<EOF
+    # Maldet
+    if command -v maldet >/dev/null; then
+        maldet --update-ver
+        maldet --update
+        
+        cat > /etc/maldetect/conf.maldet << EOF
 email_alert="1"
 email_addr="root@localhost"
 quarantine_hits="1"
 quarantine_clean="0"
 scan_tmpdir_paths="/tmp /var/tmp"
 scan_user_access="1"
-default_monitor_mode="/usr/local/maldetect/monitor_paths"
+EOF
+        
+        echo "$NAS_MOUNT" > /usr/local/maldetect/monitor_paths
+        maldet --monitor /usr/local/maldetect/monitor_paths
+        log "Maldet configured"
+    fi
+
+    # Auditd
+    cat > /etc/audit/rules.d/nas.rules << EOF
+# NAS Audit Rules
+-w $NAS_MOUNT -p rwxa -k nas_access
+-w /etc/mynas -p rwxa -k nas_config
+-w /var/log/mynas -p rwxa -k nas_logs
+-w /etc/samba -p rwxa -k samba_config
+-w /etc/exports -p wa -k nfs_config
 EOF
 
-# Set up monitoring for NAS shares
-echo "${SMB_SHARE} ${NFS_SHARE}" > /usr/local/maldetect/monitor_paths
-maldet --monitor /usr/local/maldetect/monitor_paths
-systemctl enable maldet --now || true
-log "Maldet configured with monitoring for ${SMB_SHARE} and ${NFS_SHARE}."
+    if systemctl enable auditd --now; then
+        auditctl -R /etc/audit/rules.d/nas.rules
+        log "Auditd configured"
+    fi
 
-# ---- sysctl tuning ----
-SYSCTL_NAS="/etc/sysctl.d/99-nas-tuning.conf"
-backup_file "$SYSCTL_NAS"
-cat > "$SYSCTL_NAS" <<'EOF'
-# --- Network tuning ---
-net.core.rmem_max=134217728
-net.core.wmem_max=134217728
-net.core.netdev_max_backlog=250000
-net.ipv4.tcp_rmem=4096 87380 134217728
-net.ipv4.tcp_wmem=4096 65536 134217728
-net.ipv4.tcp_window_scaling=1
-net.ipv4.tcp_mtu_probing=1
+    step_end
+}
 
-# --- File system / I/O tuning ---
-fs.file-max=2097152
-vm.swappiness=10
-vm.dirty_ratio=15
-vm.dirty_background_ratio=5
+# ---- Monitoring Configuration ----
+configure_monitoring() {
+    step_begin "Configuring Monitoring"
+    check_previous_step || return 1
 
-# --- Increase NFS & Samba efficiency ---
-net.ipv4.tcp_fin_timeout=15
-net.ipv4.tcp_tw_reuse=1
+    # Sysstat
+    sed -i 's/ENABLED="false"/ENABLED="true"/' /etc/default/sysstat
+    systemctl enable sysstat --now || true
+    log "Sysstat enabled"
+
+    # Netdata (if installed)
+    if command -v netdata >/dev/null; then
+        systemctl enable netdata --now || true
+        log "Netdata enabled on port 19999"
+    fi
+
+    # Create monitoring script
+    cat > /usr/local/bin/nas-monitor << 'EOF'
+#!/bin/bash
+echo "=== NAS Monitoring Report ==="
+echo "Generated: $(date)"
+echo ""
+echo "=== Disk Usage ==="
+df -h $NAS_MOUNT
+echo ""
+echo "=== Samba Connections ==="
+smbstatus
+echo ""
+echo "=== NFS Connections ==="
+showmount -a
+echo ""
+echo "=== Service Status ==="
+systemctl status smbd nmbd nfs-server fail2ban firewalld --no-pager | grep -E "●|Active:"
+echo ""
+echo "=== Recent Logs ==="
+tail -20 /var/log/mynas/setup.log 2>/dev/null || echo "No mynas logs yet"
 EOF
 
-sysctl --system >/dev/null || true
-log "Sysctl kernel params applied."
+    chmod +x /usr/local/bin/nas-monitor
+    log "Monitoring tools configured"
 
-# ---- ulimits ----
-ULIMIT_FILE="/etc/security/limits.d/nas.conf"
-backup_file "$ULIMIT_FILE"
-cat > "$ULIMIT_FILE" <<EOF
-*       hard    nofile  1048576
-*       soft    nofile  1048576
-*       hard    nproc   65535
-*       soft    nproc   65535
+    step_end
+}
+
+# ---- System Optimization ----
+optimize_system() {
+    step_begin "System Optimization"
+    check_previous_step || return 1
+
+    # Sysctl optimizations
+    cat > /etc/sysctl.d/99-nas-optimize.conf << EOF
+# NAS Performance Optimizations
+net.core.rmem_max = 134217728
+net.core.wmem_max = 134217728
+net.ipv4.tcp_rmem = 4096 87380 134217728
+net.ipv4.tcp_wmem = 4096 65536 134217728
+net.ipv4.tcp_window_scaling = 1
+net.ipv4.tcp_mtu_probing = 1
+fs.file-max = 2097152
+vm.swappiness = 10
+vm.dirty_ratio = 15
+vm.dirty_background_ratio = 5
 EOF
-log "Ulimits set for max open files and processes."
 
-# ---- Disk scheduler optimization ----
-for disk in $(lsblk -d -n -o NAME | grep -v "loop\|sr"); do
-  sched="/sys/block/$disk/queue/scheduler"
-  if [[ -f "$sched" ]]; then
-    echo deadline > "$sched"
-    log "Set I/O scheduler to 'deadline' for /dev/$disk"
-  fi
-done
+    sysctl --system >/dev/null || true
+    log "Sysctl optimizations applied"
 
-# ---- Mount options reminder ----
-log "Reminder: mount NAS shares with noatime,nodiratime for performance."
+    # Ulimits
+    cat > /etc/security/limits.d/nas.conf << EOF
+* soft nofile 1048576
+* hard nofile 1048576
+* soft nproc 65535
+* hard nproc 65535
+EOF
+    log "Ulimits configured"
 
-# ---- Optional SSD tweaks ----
-if command -v fstrim >/dev/null; then
-  log "Enabling weekly fstrim timer..."
-  systemctl enable fstrim.timer --now
-fi
+    # I/O scheduler
+    for disk in $(lsblk -d -n -o NAME | grep -v "loop\|sr"); do
+        sched="/sys/block/$disk/queue/scheduler"
+        if [[ -f "$sched" ]]; then
+            echo "deadline" > "$sched" 2>/dev/null || true
+        fi
+    done
+    log "I/O scheduler optimized"
 
-# ---- Enable zswap (optional, if RAM <16GB) ----
-RAM_MB=$(free -m | awk '/Mem:/ {print $2}')
-if [[ $RAM_MB -lt 16000 ]]; then
-  log "Enabling zswap for low-RAM system..."
-  echo 1 > /sys/module/zswap/parameters/enabled || true
-fi
+    # SSD optimization
+    if command -v fstrim >/dev/null; then
+        systemctl enable fstrim.timer --now
+        log "Weekly fstrim enabled"
+    fi
 
-# ---- final info ----
-cat <<INFO
+    step_end
+}
 
-============================================================
- DONE ✅  Your NAS baseline is ready.
-------------------------------------------------------------
-Samba:
-  Share:    [Data] -> ${SMB_SHARE}
-  Group:    ${SMB_GROUP}
-  Service:  smbd, nmbd (enabled)
-  Users:    ${USERS_CSV:-<none>}
-  Default Samba password for created users: ${DEFAULT_SMB_PASSWORD}
+# ---- Backup Configuration ----
+configure_backup() {
+    step_begin "Configuring Backup System"
+    check_previous_step || return 1
 
-NFS:
-  Export:   ${NFS_SHARE} ${NFS_CIDR}(rw,sync,no_subtree_check,no_root_squash)
-  Service:  nfs-kernel-server (enabled)
+    # Create backup script
+    cat > /usr/local/bin/nas-backup << 'EOF'
+#!/bin/bash
+# NAS Backup Script
+BACKUP_DIR="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S)"
+LOG_FILE="/var/log/mynas/backup_$(date +%Y%m%d).log"
 
-Security:
-  Firewalld: Enabled with SSH, Samba, NFS, and source ${NFS_CIDR}
-  Fail2ban: Enabled for SSH and Samba protection
-  ClamAV: Enabled with weekly scans of ${SMB_SHARE} and ${NFS_SHARE}
-  Maldet: Enabled with monitoring of ${SMB_SHARE} and ${NFS_SHARE}
+mkdir -p "$BACKUP_DIR"
+echo "Backup started at $(date)" > "$LOG_FILE"
 
-Monitoring & tools installed:
-  glances, sysstat (iostat, sar), iotop, dstat, ncdu, iftop, nload, bmon,
-  rsync, sshfs, smartmontools, hdparm, mdadm, lvm2, htop, tmux,
-  fail2ban, firewalld, clamav, maldet
+# Backup configurations
+tar -czf "$BACKUP_DIR/configs.tar.gz" \
+    /etc/samba \
+    /etc/mynas \
+    /etc/exports \
+    /etc/fail2ban \
+    /etc/firewalld 2>> "$LOG_FILE"
 
-Security notes:
-  * CHANGE Samba passwords immediately: smbpasswd <user>
-  * Review firewalld rules: firewall-cmd --list-all
-  * Check ClamAV scan logs: /var/log/clamav/nas-scan.log
-  * Check Maldet logs: /var/log/maldet/
-  * Consider restricting NFS to specific hosts instead of a subnet.
+# Backup user data
+rsync -av --delete "$NAS_MOUNT/data/" "$BACKUP_DIR/data/" 2>> "$LOG_FILE"
 
-Re-run this script safely if you change flags (it is idempotent).
-============================================================
-INFO
+# Backup system info
+{
+    echo "=== System Information ==="
+    uname -a
+    echo ""
+    echo "=== Installed Packages ==="
+    dpkg -l | grep -E "samba|nfs|clamav|fail2ban"
+    echo ""
+    echo "=== Disk Information ==="
+    lsblk -f
+    echo ""
+    echo "=== Network Configuration ==="
+    ip addr show
+} > "$BACKUP_DIR/system_info.txt"
 
-log "NAS kernel and system optimization complete."
+echo "Backup completed at $(date)" >> "$LOG_FILE"
+echo "Backup location: $BACKUP_DIR"
+EOF
+
+    chmod +x /usr/local/bin/nas-backup
+
+    # Schedule weekly backup
+    cat > /etc/cron.weekly/nas-backup << EOF
+#!/bin/sh
+/usr/local/bin/nas-backup
+find $BACKUP_DIR -name "backup_*" -mtime +30 -delete
+EOF
+
+    chmod +x /etc/cron.weekly/nas-backup
+    log "Backup system configured"
+
+    step_end
+}
+
+# ---- Final Configuration ----
+final_configuration() {
+    step_begin "Final Configuration"
+    check_previous_step || return 1
+
+    # Create startup script
+    cat > /etc/rc.local << 'EOF'
+#!/bin/bash
+# NAS Startup Script
+sleep 10
+
+# Apply access policies
+/etc/mynas/apply_policies.sh
+
+# Start monitoring
+systemctl start netdata 2>/dev/null || true
+
+# Log startup
+echo "NAS started at $(date)" >> /var/log/mynas/startup.log
 
 exit 0
+EOF
+
+    chmod +x /etc/rc.local
+
+    # Create documentation
+    cat > "$NAS_MOUNT/README.txt" << EOF
+=== NAS Storage System ===
+Created: $(date)
+
+Directory Structure:
+- $NAS_MOUNT/data/     - Main data storage
+- $NAS_MOUNT/shares/   - Shared files
+- $NAS_MOUNT/groups/   - Group directories
+- $BACKUP_DIR/         - Backups
+
+Access Methods:
+1. Samba (SMB/CIFS): \\\\$(hostname)\\
+   - Data: \\\\$(hostname)\\Data
+   - Backup: \\\\$(hostname)\\Backup
+   - Shares: \\\\$(hostname)\\Shares
+
+2. NFS: nfs://$(hostname)$NAS_MOUNT/data
+
+3. Local: All files are accessible via $NAS_MOUNT
+
+Management:
+- mynas tool: /usr/local/bin/mynas
+- Monitoring: nas-monitor
+- Backup: nas-backup
+- Logs: /var/log/mynas/
+
+Security Notes:
+- Change default passwords immediately
+- Review firewall rules: firewall-cmd --list-all
+- Check security logs: /var/log/fail2ban.log
+
+Support:
+- Configuration: /etc/mynas/
+- Documentation: See README files in each directory
+EOF
+
+    # Apply initial policies
+    "$MYNAS_CONFIG_DIR/apply_policies.sh"
+
+    log "Final configuration completed"
+    step_end
+}
+
+# ---- Generate Report ----
+generate_report() {
+    step_begin "Generating Final Report"
+    
+    local total_steps=${#STEP_STATUS[@]}
+    local passed_steps=0
+    local failed_steps=0
+
+    for step in "${!STEP_STATUS[@]}"; do
+        if [[ "${STEP_STATUS[$step]}" == "PASSED" ]]; then
+            ((passed_steps++))
+        elif [[ "${STEP_STATUS[$step]}" == "FAILED" ]]; then
+            ((failed_steps++))
+        fi
+    done
+
+    # Final report
+    echo -e "\n${BOLD}${CYAN}===========================================${NC}"
+    echo -e "${BOLD}${GREEN}NAS SETUP COMPLETED${NC}"
+    echo -e "${BOLD}${CYAN}===========================================${NC}"
+    echo -e "${BOLD}Summary:${NC}"
+    echo -e "  Total Steps: $total_steps"
+    echo -e "  ${GREEN}✓ Passed: $passed_steps${NC}"
+    
+    if [[ $failed_steps -gt 0 ]]; then
+        echo -e "  ${RED}✗ Failed: $failed_steps${NC}"
+        echo -e "\n${BOLD}Failed Steps:${NC}"
+        for step in "${FAILED_STEPS[@]}"; do
+            echo -e "  - $step: ${STEP_MESSAGE[$step]:-No message}"
+        done
+    else
+        echo -e "  ${GREEN}✓ All steps completed successfully!${NC}"
+    fi
+
+    echo -e "\n${BOLD}Configuration Details:${NC}"
+    echo -e "  NAS Root: $NAS_MOUNT"
+    echo -e "  Samba Share: $NAS_MOUNT/data"
+    echo -e "  NFS Export: $NAS_MOUNT/data"
+    echo -e "  Backup Directory: $BACKUP_DIR"
+    echo -e "  Configuration: $MYNAS_CONFIG_DIR"
+    echo -e "  Logs: $MYNAS_LOG_DIR"
+
+    echo -e "\n${BOLD}Access Information:${NC}"
+    echo -e "  Samba: \\\\$(hostname)\\Data"
+    echo -e "  NFS: nfs://$(hostname)$NAS_MOUNT/data"
+    echo -e "  Web Monitoring: http://$(hostname -I | awk '{print $1}'):19999"
+
+    echo -e "\n${BOLD}Management Commands:${NC}"
+    echo -e "  Monitor: nas-monitor"
+    echo -e "  Backup: nas-backup"
+    echo -e "  Status: systemctl status smbd nmbd nfs-server"
+
+    echo -e "\n${BOLD}Security Actions Required:${NC}"
+    echo -e "  1. Change default passwords:"
+    echo -e "     passwd <username>"
+    echo -e "     smbpasswd <username>"
+    echo -e "  2. Review firewall: firewall-cmd --list-all"
+    echo -e "  3. Check security logs: journalctl -u fail2ban"
+
+    echo -e "\n${BOLD}Detailed report saved to: $REPORT_FILE${NC}"
+
+    # Save to report file
+    echo "" >> "$REPORT_FILE"
+    echo "=== FINAL REPORT ===" >> "$REPORT_FILE"
+    echo "Total Steps: $total_steps" >> "$REPORT_FILE"
+    echo "Passed: $passed_steps" >> "$REPORT_FILE"
+    echo "Failed: $failed_steps" >> "$REPORT_FILE"
+    
+    if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
+        echo "" >> "$REPORT_FILE"
+        echo "Failed Steps:" >> "$REPORT_FILE"
+        for step in "${FAILED_STEPS[@]}"; do
+            echo "  - $step" >> "$REPORT_FILE"
+        done
+    fi
+    
+    echo "" >> "$REPORT_FILE"
+    echo "=== SYSTEM INFORMATION ===" >> "$REPORT_FILE"
+    echo "Hostname: $(hostname)" >> "$REPORT_FILE"
+    echo "IP Address: $(hostname -I | awk '{print $1}')" >> "$REPORT_FILE"
+    echo "Kernel: $(uname -r)" >> "$REPORT_FILE"
+    echo "Distribution: $(lsb_release -d 2>/dev/null | cut -f2 || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2)" >> "$REPORT_FILE"
+    
+    echo "" >> "$REPORT_FILE"
+    echo "=== DISK INFORMATION ===" >> "$REPORT_FILE"
+    df -h "$NAS_MOUNT" >> "$REPORT_FILE" 2>/dev/null || echo "NAS mount not found" >> "$REPORT_FILE"
+    
+    echo "" >> "$REPORT_FILE"
+    echo "=== SERVICE STATUS ===" >> "$REPORT_FILE"
+    systemctl status smbd nmbd nfs-server fail2ban firewalld --no-pager 2>/dev/null | grep -E "●|Active:" >> "$REPORT_FILE"
+    
+    step_end
+}
+
+# ---- Argument Parsing ----
+usage() {
+    cat <<EOF
+Enhanced NAS Configuration Script
+=================================
+
+This script converts a Linux system into a fully-featured NAS storage server
+with group-based access control, monitoring, and security features.
+
+Features:
+- User and group management with access policies
+- Samba (SMB/CIFS) and NFS file sharing
+- RAID and LVM support
+- Comprehensive monitoring tools
+- Security hardening (firewall, fail2ban, antivirus)
+- Backup system
+- Performance optimization
+
+Usage:
+  sudo ./setup_nas.sh [OPTIONS]
+
+Options:
+  --users       Comma-separated usernames to create (e.g., "john,alice,bob")
+  --smb-share   Path for Samba share (default: /srv/samba/data)
+  --nfs-share   Path for NFS export (default: /srv/nfs/data)
+  --nfs-cidr    Allowed network in CIDR format (default: 192.168.0.0/24)
+  --nas-mount   Main NAS mount point (default: /mnt/nas)
+  --backup-dir  Backup directory (default: /mnt/backup)
+  -h, --help    Show this help message
+
+Examples:
+  sudo ./setup_nas.sh --users admin,user1,user2
+  sudo ./setup_nas.sh --nas-mount /data --backup-dir /backup
+
+Notes:
+  * Script is idempotent - can be safely re-run
+  * Each step is validated before proceeding
+  * Detailed report generated at completion
+  * Default passwords should be changed immediately
+
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --users) USERS_CSV="${2:-}"; shift 2 ;;
+        --smb-share) SMB_SHARE="${2:-}"; shift 2 ;;
+        --nfs-share) NFS_SHARE="${2:-}"; shift 2 ;;
+        --nfs-cidr) NFS_CIDR="${2:-}"; shift 2 ;;
+        --nas-mount) NAS_MOUNT="${2:-}"; shift 2 ;;
+        --backup-dir) BACKUP_DIR="${2:-}"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo -e "${RED}Unknown argument: $1${NC}"; usage; exit 1 ;;
+    esac
+done
+
+# ---- Main Execution ----
+main() {
+    echo -e "${BOLD}${MAGENTA}"
+    echo "==========================================="
+    echo "   Enhanced NAS Configuration Script"
+    echo "   Converting Linux to NAS Storage"
+    echo "==========================================="
+    echo -e "${NC}"
+    
+    init_report
+    
+    # Execute steps in order
+    local steps=(
+        preflight_check
+        install_packages
+        create_directory_structure
+        setup_users_groups
+        setup_mynas_config
+        configure_samba
+        configure_nfs
+        configure_firewall
+        configure_security
+        configure_monitoring
+        optimize_system
+        configure_backup
+        final_configuration
+    )
+    
+    for step in "${steps[@]}"; do
+        if ! $step; then
+            error "Step $step failed. Check logs for details."
+            # Ask if user wants to continue despite failure
+            read -p "Continue despite failure? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                break
+            fi
+        fi
+    done
+    
+    generate_report
+    
+    # Final warning if any steps failed
+    if [[ ${#FAILED_STEPS[@]} -gt 0 ]]; then
+        echo -e "\n${BOLD}${YELLOW}WARNING: Some steps failed during installation.${NC}"
+        echo -e "The NAS may not be fully functional."
+        echo -e "Check $REPORT_FILE for details."
+        exit 1
+    else
+        echo -e "\n${BOLD}${GREEN}✅ NAS configuration completed successfully!${NC}"
+        echo -e "${BOLD}Please review the report above and complete security actions.${NC}"
+        exit 0
+    fi
+}
+
+# Run main function
+main "$@"
