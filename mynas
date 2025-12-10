@@ -6,6 +6,13 @@ CONFIG_DIR="/etc/mynas"
 LOG_DIR="/var/log/mynas"
 BACKUP_DIR="/mnt/backups"
 TEMP_DIR="/tmp/mynas"
+POLICY_DIR="/etc/mynas/policies"
+GROUPS_CONF="$CONFIG_DIR/groups.conf"
+POLICIES_CONF="$CONFIG_DIR/policies.conf"
+SHARES_CONF="$CONFIG_DIR/shares.conf"
+
+
+
 
 # Distribution Detection
 detect_distro() {
@@ -49,6 +56,21 @@ detect_distro() {
 # Initialize directories and logging
 init() {
     mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$BACKUP_DIR" "$TEMP_DIR"
+    if [ ! -f "$GROUPS_CONF" ]; then
+        echo "# Group Configuration" > "$GROUPS_CONF"
+        echo "# Format: groupname:user1,user2,user3" >> "$GROUPS_CONF"
+    fi
+    
+    if [ ! -f "$POLICIES_CONF" ]; then
+        echo "# Access Policies Configuration" > "$POLICIES_CONF"
+        echo "# Format: policy_name:group:path:permissions:recursive" >> "$POLICIES_CONF"
+        echo "# permissions: r=read, w=write, x=execute, l=list, n=none" >> "$POLICIES_CONF"
+    fi
+    
+    if [ ! -f "$SHARES_CONF" ]; then
+        echo "# Shares Configuration" > "$SHARES_CONF"
+        echo "# Format: share_name:path:owner_group:access_groups:permissions" >> "$SHARES_CONF"
+    fi
     local timestamp=$(date +"%Y%m%d_%H%M%S")
     LOG_FILE="$LOG_DIR/mynas_$timestamp.log"
     exec 3>&1 4>&2
@@ -104,6 +126,12 @@ show_help() {
     echo "  --network      Network management"
     echo "  --service      Service management"
     echo "  --user         User management"
+    echo "  --group        Group management"
+    echo "  --policy       Access policy management"
+    echo "  --share        Share management"
+    echo "  --permission   File permission management"
+    echo "  --lvm           LVM management"
+    echo "  --fs-advanced   Advanced filesystem management"
     echo ""
     echo "Run 'mynas --help --[MODULE]' for module-specific help"
     echo "All operations are logged to $LOG_DIR"
@@ -207,6 +235,41 @@ module_help() {
             echo "  --mask <service>               Mask service"
             echo "  --unmask <service>             Unmask service"
             ;;
+        lvm)
+            echo "LVM Module Commands:"
+            echo "  --create-pv <device>           Create physical volume"
+            echo "  --create-vg <name> <pvs>       Create volume group"
+            echo "  --create-lv <vg> <name> <size> Create logical volume"
+            echo "  --extend-lv <lv> <size>        Extend logical volume"
+            echo "  --reduce-lv <lv> <size>        Reduce logical volume"
+            echo "  --list-pv                     List physical volumes"
+            echo "  --list-vg                     List volume groups"
+            echo "  --list-lv                     List logical volumes"
+            echo "  --remove-lv <lv>              Remove logical volume"
+            echo "  --remove-vg <vg>              Remove volume group"
+            echo "  --remove-pv <pv>              Remove physical volume"
+            ;;
+        fs-advanced)
+            echo "Advanced Filesystem Module Commands:"
+            echo "  --resize <device> [size]        Resize filesystem"
+            echo "  --check <device> [fstype]       Check filesystem"
+            echo "  --label <device> <label> [fstype] Set filesystem label"
+            echo "  --tune <device> <option> <value> Tune filesystem parameters"
+            echo "  --defrag <mountpoint>           Defragment filesystem"
+            echo "  --swap <device> <action>        Manage swap space"
+            echo ""
+            echo "Tune options:"
+            echo "  reserved <percentage>    Set reserved blocks percentage"
+            echo "  mounts <count>           Set maximum mount count"
+            echo "  interval <time>          Set check interval (time)"
+            echo ""
+            echo "Swap actions:"
+            echo "  create    - Create and enable swap"
+            echo "  enable    - Enable existing swap"
+            echo "  disable   - Disable swap"
+            echo "  remove    - Remove swap from fstab"
+            echo "  status    - Show swap status"
+            ;;
         user)
             echo "User Module Commands:"
             echo "  --add <user> [shell]           Add user"
@@ -219,7 +282,52 @@ module_help() {
             echo "  --lock <user>                  Lock user account"
             echo "  --unlock <user>                Unlock user account"
             ;;
+        group)
+            echo "Group Module Commands:"
+            echo "  --create <group>               Create new group"
+            echo "  --delete <group>               Delete group"
+            echo "  --adduser <group> <user>       Add user to group"
+            echo "  --removeuser <group> <user>    Remove user from group"
+            echo "  --list [group]                 List all groups or group members"
+            echo "  --setowner <group> <user>      Set group owner with directory"
+            ;;
+        policy)
+            echo "Policy Module Commands:"
+            echo "  --create <policy> <group> <path> <perms> [recursive]"
+            echo "                                  Create access policy"
+            echo "  --delete <policy>               Delete policy"
+            echo "  --apply <policy>                Apply policy to filesystem"
+            echo "  --applyall                      Apply all policies"
+            echo "  --list [policy]                 List all policies or policy details"
+            echo "  --test <user> <path>            Test user access to path"
+            echo ""
+            echo "Permission codes:"
+            echo "  r    - Read only"
+            echo "  rw   - Read/Write"
+            echo "  rwx  - Read/Write/Execute"
+            echo "  none - No access"
+            ;;
+        share)
+            echo "Share Module Commands:"
+            echo "  --create <name> <path> <owner_group> <access_groups> [perms]"
+            echo "                                  Create new share"
+            echo "  --delete <share>                Delete share"
+            echo "  --addgroup <share> <group>      Add group to share access"
+            echo "  --removegroup <share> <group>   Remove group from share"
+            echo "  --list                         List all shares"
+            echo "  --info <share>                  Show share details"
+            ;;
+        permission)
+            echo "Permission Module Commands:"
+            echo "  --set <path> [owner] [group] [perms]  Set permissions"
+            echo "  --fix <path>                   Fix permissions recursively"
+            echo "  --inherit <path>               Set up permission inheritance"
+            echo "  --check <path> [user]          Check permissions"
+            echo "  --reset <path>                 Reset to default permissions"
+            ;;
+
         *)
+
             show_help
             ;;
     esac
@@ -757,6 +865,247 @@ raid_manage() {
     esac
 }
 
+
+
+# ==================== LVM MANAGEMENT ====================
+
+lvm_manage() {
+    # Check if LVM tools are installed
+    if ! command -v pvcreate &> /dev/null; then
+        log "Installing LVM2..."
+        eval $INSTALL_CMD lvm2
+    fi
+
+    case "$1" in
+        create-pv)
+            local device="$2"
+            log "Creating physical volume on $device"
+            pvcreate "$device" || die "Failed to create physical volume"
+            log "Physical volume created on $device"
+            ;;
+        create-vg)
+            local vg_name="$2"
+            local pvs="$3"
+            log "Creating volume group $vg_name with PVs: $pvs"
+            vgcreate "$vg_name" $pvs || die "Failed to create volume group"
+            log "Volume group $vg_name created"
+            ;;
+        create-lv)
+            local vg_name="$2"
+            local lv_name="$3"
+            local size="$4"
+            log "Creating logical volume $lv_name in $vg_name with size $size"
+            lvcreate -n "$lv_name" -L "$size" "$vg_name" || die "Failed to create logical volume"
+            log "Logical volume $lv_name created"
+            
+            # Create filesystem on the new LV
+            local lv_path="/dev/$vg_name/$lv_name"
+            log "Creating ext4 filesystem on $lv_path"
+            mkfs.ext4 "$lv_path" || die "Failed to create filesystem"
+            ;;
+        extend-lv)
+            local lv_path="$2"
+            local size="$3"
+            log "Extending logical volume $lv_path by $size"
+            lvextend -L "+$size" "$lv_path" || die "Failed to extend logical volume"
+            
+            # Resize filesystem
+            log "Resizing filesystem"
+            if mount | grep -q "$lv_path"; then
+                resize2fs "$lv_path" || die "Failed to resize filesystem"
+            else
+                log "Warning: LV not mounted. Resize filesystem manually after mounting."
+            fi
+            log "Logical volume $lv_path extended by $size"
+            ;;
+        reduce-lv)
+            local lv_path="$2"
+            local size="$3"
+            log "Reducing logical volume $lv_path by $size"
+            
+            # First reduce filesystem
+            log "Reducing filesystem"
+            resize2fs "$lv_path" "$size" || die "Failed to reduce filesystem"
+            
+            # Then reduce LV
+            lvreduce -L "$size" "$lv_path" || die "Failed to reduce logical volume"
+            log "Logical volume $lv_path reduced to $size"
+            ;;
+        list-pv)
+            log "Listing physical volumes"
+            pvs || die "Failed to list physical volumes"
+            ;;
+        list-vg)
+            log "Listing volume groups"
+            vgs || die "Failed to list volume groups"
+            ;;
+        list-lv)
+            log "Listing logical volumes"
+            lvs || die "Failed to list logical volumes"
+            ;;
+        remove-lv)
+            local lv_path="$2"
+            log "Removing logical volume $lv_path"
+            lvremove -f "$lv_path" || die "Failed to remove logical volume"
+            log "Logical volume $lv_path removed"
+            ;;
+        remove-vg)
+            local vg_name="$2"
+            log "Removing volume group $vg_name"
+            vgremove "$vg_name" || die "Failed to remove volume group"
+            log "Volume group $vg_name removed"
+            ;;
+        remove-pv)
+            local pv_device="$2"
+            log "Removing physical volume $pv_device"
+            pvremove "$pv_device" || die "Failed to remove physical volume"
+            log "Physical volume $pv_device removed"
+            ;;
+        *)
+            die "Invalid LVM command"
+            ;;
+    esac
+}
+
+# ==================== ADVANCED FILESYSTEM MANAGEMENT ====================
+
+fs_advanced_manage() {
+    case "$1" in
+        resize)
+            local device="$2"
+            local size="${3:-}"
+            log "Resizing filesystem on $device"
+            
+            if [ -z "$size" ]; then
+                # Resize to maximum
+                resize2fs "$device" || die "Failed to resize filesystem"
+                log "Filesystem resized to maximum on $device"
+            else
+                # Resize to specific size
+                resize2fs "$device" "$size" || die "Failed to resize filesystem"
+                log "Filesystem resized to $size on $device"
+            fi
+            ;;
+        check)
+            local device="$2"
+            local fs_type="${3:-ext4}"
+            log "Checking filesystem on $device"
+            
+            case "$fs_type" in
+                ext4|ext3|ext2)
+                    e2fsck -f -y "$device" || die "Filesystem check failed"
+                    ;;
+                xfs)
+                    xfs_repair -n "$device" || die "Filesystem check failed"
+                    ;;
+                btrfs)
+                    btrfs check "$device" || die "Filesystem check failed"
+                    ;;
+                *)
+                    die "Unsupported filesystem type: $fs_type"
+                    ;;
+            esac
+            log "Filesystem check completed on $device"
+            ;;
+        label)
+            local device="$2"
+            local label="$3"
+            local fs_type="${4:-ext4}"
+            log "Setting label '$label' on $device"
+            
+            case "$fs_type" in
+                ext4|ext3|ext2)
+                    e2label "$device" "$label" || die "Failed to set label"
+                    ;;
+                xfs)
+                    xfs_admin -L "$label" "$device" || die "Failed to set label"
+                    ;;
+                btrfs)
+                    btrfs filesystem label "$device" "$label" || die "Failed to set label"
+                    ;;
+                *)
+                    die "Unsupported filesystem type: $fs_type"
+                    ;;
+            esac
+            log "Label '$label' set on $device"
+            ;;
+        tune)
+            local device="$2"
+            local option="$3"
+            local value="$4"
+            log "Tuning filesystem on $device"
+            
+            if [[ "$option" == "reserved" ]]; then
+                tune2fs -m "$value" "$device" || die "Failed to tune filesystem"
+                log "Reserved blocks percentage set to $value% on $device"
+            elif [[ "$option" == "mounts" ]]; then
+                tune2fs -c "$value" "$device" || die "Failed to tune filesystem"
+                log "Maximum mount count set to $value on $device"
+            elif [[ "$option" == "interval" ]]; then
+                tune2fs -i "$value" "$device" || die "Failed to tune filesystem"
+                log "Check interval set to $value on $device"
+            else
+                die "Invalid tune option: $option"
+            fi
+            ;;
+        defrag)
+            local mountpoint="$2"
+            log "Defragmenting filesystem at $mountpoint"
+            
+            if command -v e4defrag &> /dev/null; then
+                e4defrag "$mountpoint" || log "Defragmentation completed with warnings"
+            else
+                log "Installing e2fsprogs for defragmentation..."
+                eval $INSTALL_CMD e2fsprogs
+                e4defrag "$mountpoint" || log "Defragmentation completed with warnings"
+            fi
+            log "Defragmentation completed for $mountpoint"
+            ;;
+        swap)
+            local device="$2"
+            local action="$3"
+            
+            case "$action" in
+                create)
+                    log "Creating swap space on $device"
+                    mkswap "$device" || die "Failed to create swap"
+                    swapon "$device" || die "Failed to activate swap"
+                    echo "$device none swap sw 0 0" >> /etc/fstab
+                    log "Swap created and activated on $device"
+                    ;;
+                enable)
+                    log "Enabling swap on $device"
+                    swapon "$device" || die "Failed to enable swap"
+                    log "Swap enabled on $device"
+                    ;;
+                disable)
+                    log "Disabling swap on $device"
+                    swapoff "$device" || die "Failed to disable swap"
+                    log "Swap disabled on $device"
+                    ;;
+                remove)
+                    log "Removing swap from $device"
+                    swapoff "$device" || die "Failed to disable swap"
+                    sed -i "\|^$device|d" /etc/fstab
+                    log "Swap removed from $device"
+                    ;;
+                status)
+                    log "Swap status:"
+                    swapon --show || die "Failed to show swap status"
+                    free -h | grep -i swap
+                    ;;
+                *)
+                    die "Invalid swap action: $action"
+                    ;;
+            esac
+            ;;
+        *)
+            die "Invalid filesystem command"
+            ;;
+    esac
+}
+
+
 # ==================== NETWORK MANAGEMENT ====================
 
 network_manage() {
@@ -871,6 +1220,8 @@ service_manage() {
 
 # ==================== USER MANAGEMENT ====================
 
+# ==================== ENHANCED USER MANAGEMENT ====================
+
 user_manage() {
     case "$1" in
         add)
@@ -879,17 +1230,41 @@ user_manage() {
             log "Adding user $user with shell $shell"
             useradd -m -s "$shell" "$user" || die "Failed to add user"
             passwd "$user" || die "Failed to set password"
-            log "User $user added successfully"
+            
+            # Create user's home directory with proper permissions
+            mkdir -p "/home/$user/private"
+            mkdir -p "/home/$user/shared"
+            chown -R "$user:$user" "/home/$user"
+            chmod 750 "/home/$user"
+            chmod 700 "/home/$user/private"
+            chmod 755 "/home/$user/shared"
+            
+            log "User $user added successfully with private/shared directories"
             ;;
         remove)
             local user="$2"
-            log "Removing user $user"
-            userdel -r "$user" || die "Failed to remove user"
+            local keep_home="${3:-no}"
+            log "Removing user $user (keep home: $keep_home)"
+            if [ "$keep_home" = "yes" ]; then
+                userdel "$user" || die "Failed to remove user"
+            else
+                userdel -r "$user" || die "Failed to remove user"
+            fi
+            
+            # Remove user from all groups in configuration
+            sed -i "/:$user,/s/:$user,//" "$GROUPS_CONF"
+            sed -i "/:.*,$user$/s/,$user//" "$GROUPS_CONF"
+            sed -i "/:$user$/s/:$user//" "$GROUPS_CONF"
+            
             log "User $user removed successfully"
             ;;
         list)
-            log "Listing users"
-            cut -d: -f1 /etc/passwd || die "Failed to list users"
+            log "Listing all users"
+            echo "=== System Users ==="
+            cut -d: -f1 /etc/passwd
+            echo ""
+            echo "=== NAS Users (with home directories) ==="
+            ls /home/ | grep -v lost+found
             ;;
         passwd)
             local user="$2"
@@ -902,6 +1277,19 @@ user_manage() {
             local group="$3"
             log "Adding $user to group $group"
             usermod -aG "$group" "$user" || die "Failed to add user to group"
+            
+            # Update groups configuration
+            if grep -q "^$group:" "$GROUPS_CONF"; then
+                local current_users=$(grep "^$group:" "$GROUPS_CONF" | cut -d: -f2)
+                if [ -z "$current_users" ]; then
+                    sed -i "s/^$group:$/:$user/" "$GROUPS_CONF"
+                elif [[ ! ",$current_users," =~ ",$user," ]]; then
+                    sed -i "s/^$group:.*/&,$user/" "$GROUPS_CONF"
+                fi
+            else
+                echo "$group:$user" >> "$GROUPS_CONF"
+            fi
+            
             log "User $user added to group $group"
             ;;
         remove-from-group)
@@ -909,6 +1297,18 @@ user_manage() {
             local group="$3"
             log "Removing $user from group $group"
             gpasswd -d "$user" "$group" || die "Failed to remove user from group"
+            
+            # Update groups configuration
+            if grep -q "^$group:" "$GROUPS_CONF"; then
+                local current_users=$(grep "^$group:" "$GROUPS_CONF" | cut -d: -f2)
+                local new_users=$(echo ",$current_users," | sed "s/,$user,/,/g" | sed 's/^,\|,$//g')
+                if [ -z "$new_users" ]; then
+                    sed -i "s/^$group:.*/$group:/" "$GROUPS_CONF"
+                else
+                    sed -i "s/^$group:.*/$group:$new_users/" "$GROUPS_CONF"
+                fi
+            fi
+            
             log "User $user removed from group $group"
             ;;
         list-groups)
@@ -920,18 +1320,383 @@ user_manage() {
             local user="$2"
             log "Locking account for $user"
             passwd -l "$user" || die "Failed to lock account"
+            usermod -s /sbin/nologin "$user" || true
             log "Account $user locked"
             ;;
         unlock)
             local user="$2"
             log "Unlocking account for $user"
             passwd -u "$user" || die "Failed to unlock account"
+            usermod -s /bin/bash "$user" || true
             log "Account $user unlocked"
+            ;;
+        info)
+            local user="$2"
+            log "Detailed information for user $user"
+            id "$user" || die "User $user not found"
+            echo ""
+            echo "Home directory: $(getent passwd "$user" | cut -d: -f6)"
+            echo "Shell: $(getent passwd "$user" | cut -d: -f7)"
+            echo "Groups: $(groups "$user")"
+            echo "Last login: $(lastlog -u "$user" | tail -1 | awk '{print $4" "$5" "$6" "$7" "$8}')"
             ;;
         *)
             die "Invalid user command"
             ;;
     esac
+}
+
+
+
+# ==================== GROUP MANAGEMENT ====================
+
+group_manage() {
+    case "$1" in
+        create)
+            local group="$2"
+            log "Creating group $group"
+            groupadd "$group" || die "Failed to create group"
+            
+            # Add to groups configuration
+            if ! grep -q "^$group:" "$GROUPS_CONF"; then
+                echo "$group:" >> "$GROUPS_CONF"
+            fi
+            
+            # Create group directory
+            mkdir -p "/mnt/nas/groups/$group"
+            chmod 2770 "/mnt/nas/groups/$group"  # setgid for group inheritance
+            
+            log "Group $group created successfully with directory"
+            ;;
+        delete)
+            local group="$2"
+            log "Deleting group $group"
+            groupdel "$group" || die "Failed to delete group"
+            
+            # Remove from groups configuration
+            sed -i "/^$group:/d" "$GROUPS_CONF"
+            
+            log "Group $group deleted successfully"
+            ;;
+        adduser)
+            local group="$2"
+            local user="$3"
+            log "Adding user $user to group $group"
+            
+            # Add to system group
+            usermod -aG "$group" "$user" || die "Failed to add user to group"
+            
+            # Update groups configuration
+            if grep -q "^$group:" "$GROUPS_CONF"; then
+                local current_users=$(grep "^$group:" "$GROUPS_CONF" | cut -d: -f2)
+                if [ -z "$current_users" ]; then
+                    sed -i "s/^$group:$/:$user/" "$GROUPS_CONF"
+                elif [[ ! ",$current_users," =~ ",$user," ]]; then
+                    sed -i "s/^$group:.*/&,$user/" "$GROUPS_CONF"
+                fi
+            else
+                echo "$group:$user" >> "$GROUPS_CONF"
+            fi
+            
+            log "User $user added to group $group"
+            ;;
+        removeuser)
+            local group="$2"
+            local user="$3"
+            log "Removing user $user from group $group"
+            
+            # Remove from system group
+            gpasswd -d "$user" "$group" || die "Failed to remove user from group"
+            
+            # Update groups configuration
+            if grep -q "^$group:" "$GROUPS_CONF"; then
+                local current_users=$(grep "^$group:" "$GROUPS_CONF" | cut -d: -f2)
+                local new_users=$(echo ",$current_users," | sed "s/,$user,/,/g" | sed 's/^,\|,$//g')
+                if [ -z "$new_users" ]; then
+                    sed -i "s/^$group:.*/$group:/" "$GROUPS_CONF"
+                else
+                    sed -i "s/^$group:.*/$group:$new_users/" "$GROUPS_CONF"
+                fi
+            fi
+            
+            log "User $user removed from group $group"
+            ;;
+        list)
+            local group="${2:-}"
+            if [ -z "$group" ]; then
+                log "Listing all groups"
+                echo "=== System Groups ==="
+                cut -d: -f1 /etc/group
+                echo ""
+                echo "=== NAS Managed Groups ==="
+                if [ -f "$GROUPS_CONF" ]; then
+                    cat "$GROUPS_CONF"
+                else
+                    echo "No groups configured"
+                fi
+            else
+                log "Listing members of group $group"
+                echo "=== Members of $group ==="
+                if grep -q "^$group:" "$GROUPS_CONF"; then
+                    grep "^$group:" "$GROUPS_CONF" | cut -d: -f2 | tr ',' '\n'
+                else
+                    getent group "$group" | cut -d: -f4 | tr ',' '\n'
+                fi
+            fi
+            ;;
+        setowner)
+            local group="$2"
+            local owner="$3"
+            log "Setting $owner as owner of group $group"
+            
+            # Set group ownership on group directory
+            mkdir -p "/mnt/nas/groups/$group"
+            chown "$owner:$group" "/mnt/nas/groups/$group"
+            chmod 2770 "/mnt/nas/groups/$group"  # Setgid bit for group inheritance
+            
+            # Create subdirectories
+            mkdir -p "/mnt/nas/groups/$group/public"
+            mkdir -p "/mnt/nas/groups/$group/private"
+            chown "$owner:$group" "/mnt/nas/groups/$group/*"
+            chmod 2775 "/mnt/nas/groups/$group/public"
+            chmod 2770 "/mnt/nas/groups/$group/private"
+            
+            log "Group $group ownership set to $owner"
+            ;;
+        *)
+            die "Invalid group command"
+            ;;
+    esac
+}
+
+
+
+# ==================== ACCESS CONTROL POLICIES ====================
+
+policy_manage() {
+    case "$1" in
+        create)
+            local policy="$2"
+            local group="$3"
+            local path="$4"
+            local permissions="${5:-r}"
+            local recursive="${6:-no}"
+            
+            log "Creating policy $policy for group $group on path $path"
+            
+            # Validate path exists
+            if [ ! -d "$path" ]; then
+                die "Path $path does not exist"
+            fi
+            
+            # Validate group exists
+            if ! getent group "$group" > /dev/null; then
+                die "Group $group does not exist"
+            fi
+            
+            # Add to policies configuration
+            echo "$policy:$group:$path:$permissions:$recursive" >> "$POLICIES_CONF"
+            
+            # Apply policy immediately
+            apply_policy "$policy"
+            
+            log "Policy $policy created and applied"
+            ;;
+        delete)
+            local policy="$2"
+            log "Deleting policy $policy"
+            
+            # Remove from policies configuration
+            sed -i "/^$policy:/d" "$POLICIES_CONF"
+            
+            log "Policy $policy deleted"
+            ;;
+        apply)
+            local policy="$2"
+            log "Applying policy $policy"
+            apply_policy "$policy"
+            ;;
+        applyall)
+            log "Applying all policies"
+            while IFS=: read -r policy group path permissions recursive; do
+                [ -z "$policy" ] && continue
+                [ "$policy" = "#" ] && continue
+                apply_policy "$policy"
+            done < "$POLICIES_CONF"
+            log "All policies applied"
+            ;;
+        list)
+            local policy="${2:-}"
+            if [ -z "$policy" ]; then
+                log "Listing all policies"
+                echo "=== Access Policies ==="
+                if [ -f "$POLICIES_CONF" ]; then
+                    column -t -s: "$POLICIES_CONF" | head -1
+                    echo "------------------------------------------------------------"
+                    column -t -s: "$POLICIES_CONF" | tail -n +2
+                else
+                    echo "No policies configured"
+                fi
+            else
+                log "Showing details for policy $policy"
+                grep "^$policy:" "$POLICIES_CONF" | while IFS=: read -r p g path perm rec; do
+                    echo "Policy: $p"
+                    echo "Group: $g"
+                    echo "Path: $path"
+                    echo "Permissions: $perm"
+                    echo "Recursive: $rec"
+                    echo ""
+                    echo "Group members:"
+                    grep "^$g:" "$GROUPS_CONF" | cut -d: -f2 | tr ',' '\n' | sed 's/^/  /'
+                done
+            fi
+            ;;
+        test)
+            local user="$2"
+            local path="$3"
+            log "Testing access for user $user to path $path"
+            
+            # Get all groups the user belongs to
+            user_groups=$(groups "$user" | sed 's/.* : //' | tr ' ' '|')
+            
+            # Check policies for each group
+            while IFS=: read -r policy group target_path permissions recursive; do
+                [ -z "$policy" ] && continue
+                [ "$policy" = "#" ] && continue
+                
+                # Check if user is in this group
+                if [[ "$user_groups" =~ (^|\|)$group(\||$) ]]; then
+                    # Check if path matches
+                    if [[ "$path" == "$target_path"* ]] || [[ "$recursive" == "yes" && "$target_path" == "$path"* ]]; then
+                        echo "Policy '$policy' grants permissions '$permissions' via group '$group'"
+                        echo "Effective access:"
+                        
+                        # Test actual permissions
+                        sudo -u "$user" test -r "$path" && echo "  Read: YES" || echo "  Read: NO"
+                        sudo -u "$user" test -w "$path" && echo "  Write: YES" || echo "  Write: NO"
+                        sudo -u "$user" test -x "$path" && echo "  Execute: YES" || echo "  Execute: NO"
+                        return
+                    fi
+                fi
+            done < "$POLICIES_CONF"
+            
+            echo "No specific policy found for this path"
+            ;;
+        *)
+            die "Invalid policy command"
+            ;;
+    esac
+}
+
+
+
+# ==================== FILE PERMISSION MANAGEMENT ====================
+
+permission_manage() {
+    case "$1" in
+        set)
+            local path="$2"
+            local owner="${3:-}"
+            local group="${4:-}"
+            local permissions="${5:-}"
+            
+            log "Setting permissions for $path"
+            
+            if [ -n "$owner" ]; then
+                chown "$owner" "$path" || die "Failed to set owner"
+            fi
+            
+            if [ -n "$group" ]; then
+                chown ":$group" "$path" || die "Failed to set group"
+            fi
+            
+            if [ -n "$permissions" ]; then
+                chmod "$permissions" "$path" || die "Failed to set permissions"
+            fi
+            
+            log "Permissions set for $path"
+            ;;
+        fix)
+            local path="$2"
+            log "Fixing permissions recursively for $path"
+            
+            # Set proper directory permissions
+            find "$path" -type d -exec chmod 2770 {} \;
+            
+            # Set file permissions
+            find "$path" -type f -exec chmod 660 {} \;
+            
+            log "Permissions fixed for $path"
+            ;;
+        check)
+            local path="$2"
+            local user="${3:-}"
+            log "Checking permissions for $path"
+            
+            echo "=== Permission Report for $path ==="
+            echo "Ownership: $(stat -c "%U:%G" "$path")"
+            echo "Permissions: $(stat -c "%a" "$path")"
+            echo ""
+            
+            if [ -n "$user" ]; then
+                echo "Access test for user $user:"
+                sudo -u "$user" test -r "$path" && echo "  Read: YES" || echo "  Read: NO"
+                sudo -u "$user" test -w "$path" && echo "  Write: YES" || echo "  Write: NO"
+                sudo -u "$user" test -x "$path" && echo "  Execute: YES" || echo "  Execute: NO"
+            fi
+            ;;
+        *)
+            die "Invalid permission command"
+            ;;
+    esac
+}
+
+
+
+
+apply_policy() {
+    local policy="$1"
+    local policy_line=$(grep "^$policy:" "$POLICIES_CONF")
+    
+    if [ -z "$policy_line" ]; then
+        die "Policy $policy not found"
+    fi
+    
+    IFS=: read -r policy_name group path permissions recursive <<< "$policy_line"
+    
+    log "Applying policy $policy_name to $path for group $group"
+    
+    # Set group ownership
+    chown -R ":$group" "$path"
+    
+    # Set permissions based on policy
+    case "$permissions" in
+        r)  # Read only
+            chmod -R g+r,o-rwx "$path"
+            [ "$recursive" = "yes" ] && find "$path" -type d -exec chmod g+rx {} \;
+            ;;
+        rw) # Read/Write
+            chmod -R g+rw,o-rwx "$path"
+            [ "$recursive" = "yes" ] && find "$path" -type d -exec chmod g+rwx {} \;
+            ;;
+        rwx) # Read/Write/Execute
+            chmod -R g+rwx,o-rwx "$path"
+            ;;
+        none) # No access
+            chmod -R g-rwx,o-rwx "$path"
+            ;;
+        *)
+            log "Warning: Unknown permission type '$permissions', using defaults"
+            chmod -R g+rx,o-rwx "$path"
+            ;;
+    esac
+    
+    # Set setgid bit on directories if recursive
+    if [ "$recursive" = "yes" ]; then
+        find "$path" -type d -exec chmod g+s {} \;
+    fi
+    
+    log "Policy $policy_name applied successfully"
 }
 
 # ==================== MAIN FUNCTION ====================
@@ -1048,6 +1813,14 @@ main() {
             shift
             system_update
             ;;
+        --lvm)
+            shift
+            lvm_manage "$@"
+            ;;
+        --fs-advanced)
+            shift
+            fs_advanced_manage "$@"
+            ;;
         --monitor)
             shift
             case "$1" in
@@ -1106,6 +1879,19 @@ main() {
         --user)
             shift
             user_manage "$@"
+            ;;
+        # Add these cases to your existing switch statement in main()
+        --group)
+            shift
+            group_manage "$@"
+            ;;
+        --policy)
+            shift
+            policy_manage "$@"
+            ;;
+        --permission)
+            shift
+            permission_manage "$@"
             ;;
         *)
             show_help
